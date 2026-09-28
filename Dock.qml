@@ -37,11 +37,23 @@ Item {
   property bool _savingConfig: false
 
   property string screenName: ""
-  readonly property var dockScreen: {
+  // Real, connected outputs only: Qt keeps placeholder screens (empty name)
+  // alive while every output is gone and Quickshell marks destroyed outputs
+  // dangling ("{ NULL SCREEN }"). Hosting the dock window on either one
+  // breaks revival, so the fallback picks the first genuine screen instead
+  // of blindly trusting screens[0].
+  function pickScreen() {
     var s = root.screenName ? root.screenForName(root.screenName) : null
     if (s) return s
-    return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    var list = Quickshell.screens
+    for (var i = 0; i < list.length; i++) {
+      var cand = list[i]
+      if (cand && cand.name && cand.name !== "{ NULL SCREEN }") return cand
+    }
+    return null
   }
+
+  readonly property var dockScreen: root.pickScreen()
 
   function screenForName(name) {
     var list = Quickshell.screens
@@ -145,7 +157,20 @@ Item {
       if (id === "") return
       // Always append .desktop — DesktopEntry.id strips the extension, so
       // ids like org.telegram.desktop need it re-added to resolve correctly.
-      Quickshell.execDetached(["uwsm-app", "--", "gtk-launch", "--", id + ".desktop"])
+      var args = ["uwsm-app", "--", "gtk-launch", "--", id + ".desktop"]
+      // gtk-launch exits non-zero up front when the desktop file no longer
+      // resolves (stale pin, uninstalled app), but execDetached cannot
+      // observe exit codes. Launches run through launchProc so failures
+      // surface a notification instead of bouncing silently. The overlap
+      // fallback keeps rare concurrent clicks fire-and-forget; the probe
+      // itself exits within milliseconds.
+      if (launchProc.running) {
+        Quickshell.execDetached(args)
+        return
+      }
+      launchProc.pendingName = String(name || id)
+      launchProc.command = args
+      launchProc.running = true
     }
   }
 
@@ -159,6 +184,19 @@ Item {
     onExited: {
       localAppLibrary.iconIndex = localAppLibrary.pendingIconIndex
       localAppLibrary.appsChanged()
+    }
+  }
+
+  // Launch wrapper: one-shot, event-driven (a failed gtk-launch probe exits
+  // in milliseconds), so this adds zero idle CPU. A non-zero exit means the
+  // desktop file no longer resolves and the user gets told about it.
+  Process {
+    id: launchProc
+    property string pendingName: ""
+    onExited: function (exitCode, exitStatus) {
+      if (exitCode !== 0 && launchProc.pendingName !== "")
+        root.notifyAppMissing(launchProc.pendingName, "It cannot be launched — reinstall the app or unpin it from the dock.")
+      launchProc.pendingName = ""
     }
   }
 
@@ -2649,7 +2687,35 @@ Item {
   }
 
   function togglePin(appId) {
-    root.setPinned(DockModel.togglePinned(root.pinnedIds, appId))
+    var id = DockModel.stripDesktop(appId)
+    if (!id) return
+    // Pin-time validation: never pin an id that no longer resolves to an
+    // installed desktop entry — the pin could only ever bounce silently.
+    // Unpinning bypasses the check so stale pins can always be removed.
+    if (!DockModel.isPinned(root.pinnedIds, id) && !root.resolveDesktopEntry(id)) {
+      root.notifyAppMissing(id, "It cannot be pinned to the dock — reinstall the app first.")
+      return
+    }
+    root.setPinned(DockModel.togglePinned(root.pinnedIds, id))
+  }
+
+  function resolveDesktopEntry(appId) {
+    var entry = DockModel.entryFor(root.appRows, appId)
+    if (!entry && typeof DesktopEntries !== "undefined" && DesktopEntries)
+      entry = DesktopEntries.heuristicLookup(appId) || DesktopEntries.byId(appId)
+    return entry || null
+  }
+
+  // Shared feedback for the "app is gone" classes (launching a stale pin,
+  // pinning an unresolvable id) that used to fail silently. The label is
+  // markup-escaped: notification bodies are rendered as markup.
+  function notifyAppMissing(name, detail) {
+    var label = String(name || "This app").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    Quickshell.execDetached([
+      "notify-send", "-a", "OmaDock", "-i", "dialog-error",
+      "App no longer installed",
+      label + " is no longer installed. " + String(detail || "Reinstall the app or unpin it from the dock.")
+    ])
   }
 
   function launchDesktopAction(action, appName) {
@@ -2858,6 +2924,39 @@ Item {
       if (nested > widest) widest = nested
     }
     return Math.min(Math.max(widest, 220), Style.space(280))
+  }
+
+  // ------------------------------------- layer-surface recovery (issue #9)
+  // Suspend/resume, monitor unplug and DPMS make Hyprland close every layer
+  // surface (zwlr_layer_surface_v1.closed on output removal); Quickshell
+  // treats that as final and deletes the backing window outright
+  // (WlrLayershell.deleteOnInvisible), and nothing used to bring it back —
+  // the dock vanished until a shell restart. Track the close and rebuild the
+  // surface as soon as a real screen is available again. Fully event-driven.
+  property bool dockSurfaceClosed: false
+
+  Connections {
+    target: dockWindow
+    function onClosed() { root.dockSurfaceClosed = true }
+  }
+
+  Connections {
+    target: Quickshell
+    function onScreensChanged() {
+      if (root.dockSurfaceClosed)
+        // Defer past binding evaluation so dockWindow.screen has adopted
+        // the fresh QuickshellScreenInfo before the window is recreated.
+        Qt.callLater(root.recoverDockSurface)
+    }
+  }
+
+  function recoverDockSurface() {
+    if (!root.dockSurfaceClosed || !root.dockScreen) return
+    root.dockSurfaceClosed = false
+    // Setting visible takes the supported recreate path: setVisibleDirect(true)
+    // builds a new backing window and a fresh wlr-layer-shell surface on the
+    // current screen. Screen reassignment alone cannot revive a deleted one.
+    dockWindow.visible = true
   }
 
   // ------------------------------------------------- panel window
