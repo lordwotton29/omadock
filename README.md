@@ -431,6 +431,14 @@ qs -p /usr/share/omarchy/shell ipc call omadock restoreLast
 
 ---
 
+## ❤️ Support the project
+
+Enjoying OmaDock for Omarchy? Sponsoring its development is a lovely way to say thanks and help keep the project growing.
+
+<a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+
+---
+
 ## 📄 License
 
 Distributed under the **MIT License**.  
