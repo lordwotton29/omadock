@@ -34,23 +34,13 @@
 
 ## ❤️ Support the project
 
-Omadock is built by just one person — **suva ([@thepathless](https://github.com/thepathless))**. I've loved computers and programming for as long as I can remember, but I never pursued it professionally — I'm a medical student in India, and Omadock is what I build in the hours between classes and clinics (yes, heavily vibe-coded with AI pair-programming tools ✨). But this costs real money I don't quite have — AI tokens every month, plus my coding-agent subscription: I built Omadock on Google Antigravity via Jio's free 18-month Gemini Pro offer, but that promotional tier's rate limits are notoriously bad — I kept getting locked out mid-project as Omadock grew. So I moved to the Freebuff Starter plan — ₹499 to start (borrowed from my mom 😅), rising to ₹799/month, which I honestly can't keep affording.
+Omadock is built by one person — **suva ([@thepathless](https://github.com/thepathless))**, a medical student in India who codes between classes and clinics. It's free, and it always will be — but building it costs money I don't quite have: monthly AI coding tokens, and a laptop that's falling apart (dead WiFi, sticky keys, a trackpad with a mind of its own) — so I'm saving for a **[Dell XPS 13 (2026)](https://www.dell.com/en-us/blog/year-of-the-linux-laptop-omarchy-on-xps/)**.
 
-Money is always tight as a student — and my laptop is fighting me every step of the way. It's a **ThinkPad L14 Gen 2** with a **Realtek RTL8821AE** WiFi card — one of the most notoriously Linux-hostile chipsets ever shipped (constant WiFi drops, flaky Bluetooth, a touchscreen that half-works) — plus sticking keys and a trackpad with a mind of its own. Honestly, it's the worst possible laptop for Linux.
-
-So I'm saving up for a proper machine: a **Dell XPS 13 (2026)** — the same XPS line DHH, Omarchy's creator, is writing love letters to (["Year of the Linux Laptop"](https://www.dell.com/en-us/blog/year-of-the-linux-laptop-omarchy-on-xps/)). It's the cheapest of the three I'm eyeing — a Framework 13 doesn't even ship to India, and a modern ThinkPad T/X costs far more.
-
-<p align="center">
-  <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
-</p>
-
-What different amounts buy: ☕ **$5** = a chai and a smile · 🧃 **$15** = **a month of my AI coding tokens** — you literally keep the AI lights on · 🏢 **$50** = your name on Omadock. Every donation goes to exactly two things: **AI coding tokens** that make development possible, and **the laptop fund** 💻 — and every cent stacks toward both. Monthly or one-time.
+If Omadock earns a place on your desktop, [**sponsoring me**](https://github.com/sponsors/thepathless) keeps the AI lights on and the laptop fund growing. Every supporter is honored on the [**supporters wall**](SPONSORS.md) 💝 — with love, no tiers, no perks.
 
 ### 💻 Laptop fund
 
 <img src="assets/laptop-fund.svg" alt="Laptop fund: $0 of $1,000" width="480" />
-
-Every supporter is thanked on the [**supporters wall**](SPONSORS.md) 💝 — the 🏢 tier puts your name or company there.
 
 ### 📊 Where donations went
 
@@ -58,7 +48,7 @@ Every supporter is thanked on the [**supporters wall**](SPONSORS.md) 💝 — th
 | :--- | :--- | :--- | :--- |
 | — | — | — | Just launched — be the first! 🙏 |
 
-*(running total so far: **−₹499** for my Freebuff Starter subscription — borrowed from my mom 😅. Updated monthly; honesty is the least I can offer)*
+*(running total so far: **−₹499** for my coding-agent subscription — borrowed from my mom 😅. Updated monthly; honesty is the least I can offer)*
 
 To everyone who donates — really, truly, thank you. 🙏
 

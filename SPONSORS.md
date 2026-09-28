@@ -5,33 +5,16 @@
 
 *Anonymous supporters are honored just as warmly.* 🙏
 
-**[Become a supporter →](https://github.com/sponsors/thepathless)** · tiers below.
+**[Become a supporter →](https://github.com/sponsors/thepathless)** — no tiers, no perks. Just love returned.
 
 ---
 
-## 🧃 The AI Lights-On Club
-
-*Monthly **$15** — you keep the lights on: one month of my AI coding tokens, covered.*
+## The wall
 
 | Supporter | Since |
 | :--- | :--- |
-| *The lights are waiting for you…* | — |
-
-## ☕ The Chai Club
-
-*Monthly **$5** or one-time — the price of a chai and a smile.*
-
-| Supporter | Since |
-| :--- | :--- |
-| *First chai not yet poured…* | — |
-
-## 🏢 Studios & Businesses
-
-*Monthly **$50** — your name or company lives here, in the release notes, and in my genuine thanks.*
-
-| Name | Link | Since |
-| :--- | :--- | :--- |
-| *Your studio could be the first line here.* | — | — |
+| **suva** 🩺 — the maker, its first and forever supporter | 2026 |
+| *Next name could be yours…* | — |
 
 ---
 
@@ -39,7 +22,7 @@
 
 | | |
 | :--- | :--- |
-| 🧃 AI coding tokens | the ₹799/month that makes Omadock possible |
+| 🧃 AI coding tokens | the subscriptions that make Omadock possible |
 | 💻 [Laptop fund](https://github.com/thepathless/omadock#-support-the-project) | a Dell XPS 13 (2026) — `thepathless` keeps building either way |
 
 Maintained with gratitude by **[suva](https://github.com/thepathless)** — med student, night-time programmer.
