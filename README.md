@@ -219,9 +219,9 @@ Right-click the Omarchy logo or empty dock space to access deep customization.
 
 ### 🎛️ Settings Panel
 
-Choose **Dock Settings…** at the top of that menu to open the full settings panel: a sidebar with *Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders* and *App Groups*, with switches, sliders and dropdowns for every option. Changes apply live, so the dock underneath previews them. Close it with <kbd>Esc</kbd>, the close button, or a click outside. The panel can also be opened from a keybind: `omarchy-shell omadock openSettings`.
+Right-clicking either one opens the full settings panel directly: a sidebar with *Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders* and *App Groups*, with switches, sliders and dropdowns for every option. Changes apply live, so the dock underneath previews them. Close it with <kbd>Esc</kbd>, the close button, or a click outside. The panel can also be opened from a keybind: `omarchy-shell omadock openSettings`.
 
-The quick context-menu pages below remain available:
+The settings at a glance:
 
 <div align="center">
   <table>
@@ -311,6 +311,7 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
   "showBackground": true,
   "showShadow": true,
   "showBorder": true,
+  "borderOpacity": "theme",
   "itemSpacing": 4,
   "iconSize": 0,
   "hoverEffect": "zoom",
