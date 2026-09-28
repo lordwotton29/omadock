@@ -230,8 +230,18 @@ Item {
       id: cardArea
       anchors.fill: parent
       z: 0
-      acceptedButtons: Qt.LeftButton
-      onClicked: if (root && root.contextAppId !== "") root.closeContext()
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: function(mouse) {
+        if (!root) return
+        if (mouse.button === Qt.RightButton) {
+          // Right-click on the dock background reaches the settings even
+          // when the Omarchy button is hidden.
+          var pt = root.contentItemRef ? cardArea.mapToItem(root.contentItemRef, mouse.x, 0) : null
+          root.openDockSettingsMenu(pt ? pt.x : mouse.x, 0)
+          return
+        }
+        if (root.contextAppId !== "") root.closeContext()
+      }
       onReleased: {
         if (root && root.dragAppId !== "") {
           root.dragAppId = ""

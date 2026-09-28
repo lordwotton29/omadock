@@ -28,6 +28,8 @@ Item {
   readonly property alias customFolderPickerProc: customFolderPickerProc
   readonly property alias folderStackScanner: folderStackScanner
 
+  readonly property var dockRoot: root
+
   property var shell: null
   property string omarchyPath: ""
   property var manifest: null
@@ -41,17 +43,23 @@ Item {
   // alive while every output is gone and Quickshell marks destroyed outputs
   // dangling ("{ NULL SCREEN }"). Hosting the dock window on either one
   // breaks revival, so the fallback picks the first genuine screen instead
-  // of blindly trusting screens[0].
+  // of blindly trusting screens[0]. Also feeds the settings panel's monitor
+  // picker.
+  readonly property var realScreens: {
+    var list = Quickshell.screens || []
+    var out = []
+    for (var i = 0; i < list.length; i++) {
+      var cand = list[i]
+      if (cand && cand.name && cand.name !== "{ NULL SCREEN }") out.push(cand)
+    }
+    return out
+  }
+
   function pickScreen() {
     var name = root.forcedScreenName || root.screenName
     var s = name ? root.screenForName(name) : null
     if (s) return s
-    var list = Quickshell.screens
-    for (var i = 0; i < list.length; i++) {
-      var cand = list[i]
-      if (cand && cand.name && cand.name !== "{ NULL SCREEN }") return cand
-    }
-    return null
+    return root.realScreens.length > 0 ? root.realScreens[0] : null
   }
 
   readonly property var dockScreen: root.pickScreen()
@@ -143,7 +151,7 @@ Item {
   }
 
   function screenForName(name) {
-    var list = Quickshell.screens
+    var list = root.realScreens
     for (var i = 0; i < list.length; i++)
       if (list[i].name === name) return list[i]
     return null
@@ -710,6 +718,8 @@ Item {
   property bool showBackground: true
   property bool showShadow: true
   property bool showBorder: true
+  property bool settingsPanelOpen: false
+  property string settingsPanelPage: "appearance"
   property int themeVersion: 0
   property string currentIconThemeName: "Yaru"
   property string folderColor: "theme"
@@ -1260,7 +1270,7 @@ Item {
       return
     }
 
-    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== ""
+    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen
 
     // Hovered, Context Menu Open, or Dragging: keep visible
     if (isHovered) {
@@ -1289,6 +1299,7 @@ Item {
   onActiveStackFolderChanged: root.syncVisibility()
   onActiveAppGroupIdChanged: root.syncVisibility()
   onDragAppIdChanged: root.syncVisibility()
+  onSettingsPanelOpenChanged: root.syncVisibility()
   onAutohideChanged: root.syncVisibility()
   onIntelligentAutohideChanged: {
     if (root.intelligentAutohide) debounceOverlapTimer.restart()
@@ -1814,6 +1825,29 @@ Item {
     root.contextY = y
     root.settingsSubmenu = ""
     root.contextAppId = "__dock_settings__"
+  }
+
+  function openSettingsPanel() {
+    root.closeContext()
+    root.closeFolderStack()
+    root.closeAppGroup()
+    root.settingsPanelOpen = true
+  }
+
+  function closeSettingsPanel() {
+    root.settingsPanelOpen = false
+    root.syncVisibility()
+  }
+
+  // Plain value settings from the settings panel: set, persist.
+  function setOption(key, value) {
+    root[key] = value
+    root.saveConfig()
+  }
+
+  function setDockScreen(name) {
+    root.screenName = name || ""
+    root.saveConfig()
   }
 
   function setAutohideMode(mode) {
@@ -2542,6 +2576,19 @@ Item {
       root.setDockAlignment(align)
     }
 
+    function openSettings(): void {
+      root.openSettingsPanel()
+    }
+
+    function openSettingsPage(page: string): void {
+      root.settingsPanelPage = page
+      root.openSettingsPanel()
+    }
+
+    function closeSettings(): void {
+      root.closeSettingsPanel()
+    }
+
     function setPosition(pos: string): void {
       root.setDockPosition(pos)
     }
@@ -2625,6 +2672,7 @@ Item {
     conf.launchBounce = root.launchBounce
     conf.advancedTooltips = root.advancedTooltips
     if (root.screenName) conf.screen = root.screenName
+    else delete conf.screen
     conf.multiMonitor = root.multiMonitor
     conf.perMonitorApps = root.perMonitorApps
     if (root.configuredIconSize > 0) conf.iconSize = root.configuredIconSize
@@ -3211,6 +3259,18 @@ Item {
     DockContextMenu {
       id: contextMenuComp
       rootRef: root
+    }
+  }
+
+  // ------------------------------------------------------------ settings panel
+  // Built on open and torn down on close, so it always lands on the output the
+  // dock is on right now.
+  LazyLoader {
+    active: root.settingsPanelOpen && root.dockScreen !== null
+
+    SettingsPanel {
+      // Not `root`: inside SettingsPanel that name is its own property.
+      rootRef: dockRoot
     }
   }
 }
