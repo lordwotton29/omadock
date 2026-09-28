@@ -44,7 +44,7 @@ So I'm saving up for a proper machine: a **Dell XPS 13 (2026)** — the same XPS
   <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
 </p>
 
-Every donation goes to exactly two things: **AI coding tokens** that make development possible, and **the laptop fund** 💻. Monthly or one-time — both keep updates coming.
+What different amounts buy: ☕ **$5** = a chai and a smile · 🧃 **$15** = **a month of my AI coding tokens** — you literally keep the AI lights on · 🏢 **$50** = your name on Omadock. Every donation goes to exactly two things: **AI coding tokens** that make development possible, and **the laptop fund** 💻 — and every cent stacks toward both. Monthly or one-time.
 
 ### 💻 Laptop fund
 
