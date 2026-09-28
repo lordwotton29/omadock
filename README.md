@@ -24,10 +24,23 @@
   <a href="#%EF%B8%8F-controls-cheat-sheet"><b>Controls</b></a> •
   <a href="#%EF%B8%8F-configuration-reference"><b>Configuration</b></a> •
   <a href="#-keyboard-shortcuts-via-ipc"><b>Keybindings</b></a> •
-  <a href="#-faq"><b>FAQ</b></a>
+  <a href="#-faq"><b>FAQ</b></a> •
+  <a href="https://github.com/sponsors/thepathless"><b>Sponsor ❤️</b></a>
 </p>
 
 </div>
+
+---
+
+## ❤️ Support the project
+
+Omadock is built and maintained by just one person — **suva ([@thepathless](https://github.com/thepathless))**, a medical student in India, in the hours between classes and clinics. Money is genuinely tight as a student and things are always a little hectic, so if Omadock makes your desktop a nicer place, sponsoring its development would really mean a lot — even the price of a chai ☕ helps more than you'd think.
+
+<p align="center">
+  <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>
+
+Monthly or one-time — both keep updates coming. Thank you for being here! 🙏
 
 ---
 
@@ -428,14 +441,6 @@ journalctl --user -xeu omarchy-shell -n 50 --no-pager
 qs -p /usr/share/omarchy/shell ipc call omadock minimizeActive
 qs -p /usr/share/omarchy/shell ipc call omadock restoreLast
 ```
-
----
-
-## ❤️ Support the project
-
-Enjoying OmaDock for Omarchy? Sponsoring its development is a lovely way to say thanks and help keep the project growing.
-
-<a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
 
 ---
 
