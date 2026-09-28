@@ -442,6 +442,9 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 
 A running changelog of user-facing changes. Full detail lives in the [commit history](https://github.com/thepathless/omadock/commits/main).
 
+### v3.8.0 — 2026-09-28
+- **Feature ([#11](https://github.com/thepathless/omadock/pull/11), contributed by [@G-Pappas](https://github.com/G-Pappas)):** opt-in **multi-monitor mode** — one dock per connected monitor, each listing only the windows on that monitor (like the Windows taskbar on every display). Pinned apps appear on every dock, minimized tiles follow their origin monitor, monitors are hotplug-aware, and keybinds act on the focused monitor's dock first. Enable via *Settings → Placement & Alignment → Show on All Monitors* or `"multiMonitor": true`. **Off by default** — single-dock behavior is unchanged.
+
 ### v3.7.3 — 2026-09-28
 - **Bug Fix ([#9](https://github.com/thepathless/omadock/issues/9)):** the dock no longer vanishes after suspend/resume. When outputs go away (sleep, monitor unplug, DPMS) Hyprland closes every layer surface and Quickshell deletes the dock window — the dock now detects that and rebuilds its surface as soon as a real screen returns.
 - **Bug Fix:** launching an app that is no longer installed now shows an **“App no longer installed”** notification instead of failing silently — stale pinned icons no longer bounce on click.
