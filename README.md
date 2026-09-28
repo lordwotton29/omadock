@@ -34,13 +34,17 @@
 
 ## ❤️ Support the project
 
-Omadock is built and maintained by just one person — **suva ([@thepathless](https://github.com/thepathless))**, a medical student in India, in the hours between classes and clinics. Money is genuinely tight as a student and things are always a little hectic, so if Omadock makes your desktop a nicer place, sponsoring its development would really mean a lot — even the price of a chai ☕ helps more than you'd think.
+Omadock is built by just one person — **suva ([@thepathless](https://github.com/thepathless))**. I've loved computers and programming for as long as I can remember, but I never pursued it professionally — I'm a medical student in India, and Omadock is what I build in the hours between classes and clinics (yes, heavily vibe-coded with AI pair-programming tools ✨ — and those AI tokens are a real monthly bill!).
+
+Money is always tight as a student. My laptop is a broken refurbished ThinkPad — the keys stick and the trackpad has a mind of its own — so I'm saving up for a proper machine (a Dell XPS like the one DHH, Omarchy's creator, uses; a Framework 13; or a solid ThinkPad — whichever I can scrape together 💻). If Omadock makes your desktop a nicer place, any support would genuinely mean a lot — even the price of a chai ☕ helps more than you'd think.
 
 <p align="center">
   <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
 </p>
 
-Monthly or one-time — both keep updates coming. Thank you for being here! 🙏
+Every donation goes to exactly two things: **AI coding tokens** that make development possible, and **the laptop fund** 💻. Monthly or one-time — both keep updates coming.
+
+To everyone who donates — really, truly, thank you. 🙏
 
 ---
 
