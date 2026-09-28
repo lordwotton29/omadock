@@ -707,6 +707,9 @@ Item {
   }
   property string dockShape: "rounded"
   property string dockBgColor: "theme"
+  property bool showBackground: true
+  property bool showShadow: true
+  property bool showBorder: true
   property int themeVersion: 0
   property string currentIconThemeName: "Yaru"
   property string folderColor: "theme"
@@ -1729,6 +1732,9 @@ Item {
     }
     root.dockShape = parsed && typeof parsed.shape === "string" ? parsed.shape : "rounded"
     root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
+    root.showBackground = parsed ? parsed.showBackground !== false : true
+    root.showShadow = parsed ? parsed.showShadow !== false : true
+    root.showBorder = parsed ? parsed.showBorder !== false : true
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
     root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
     if (parsed && typeof parsed.minimizeMode === "string") {
@@ -2626,6 +2632,9 @@ Item {
     conf.opacity = root.dockOpacity < 0 ? "theme" : root.dockOpacity
     conf.shape = root.dockShape
     conf.bgColor = root.dockBgColor
+    conf.showBackground = root.showBackground
+    conf.showShadow = root.showShadow
+    conf.showBorder = root.showBorder
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
     conf.minimizeMode = root.minimizeMode
