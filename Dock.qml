@@ -340,6 +340,17 @@ Item {
   readonly property real magnifyRange: root.iconSlot * 2.2
   readonly property real baseIconArt: root.iconSize - Style.space(4)
 
+  // Shared slot geometry. Every item (apps, groups, folders, drives, the
+  // Omarchy button) draws its artwork in the same baseIconArt box, centred in
+  // the part of the slot above a fixed indicator band. The box never moves with
+  // running state, so icons stay level whether or not they carry dots.
+  readonly property real indicatorBand: Style.space(6)
+  // Distance from the slot's bottom edge to the bottom of the artwork.
+  readonly property real iconArtBottom: Math.round(root.indicatorBand + (root.iconSlot - root.indicatorBand - root.baseIconArt) / 2)
+  // Vertical offset of the artwork's centre from the slot's centre, for
+  // things centred on the row (separators, preview tiles).
+  readonly property real iconCenterOffset: -root.indicatorBand / 2
+
   // The card's own handler in dockCard-local coordinates.
   readonly property real pointerX: cardHover.hovered
     ? cardHover.point.position.x

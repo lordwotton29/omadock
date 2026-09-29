@@ -74,11 +74,11 @@ Item {
 
     Item {
       id: iconContainer
-      width: root ? root.iconSize : 0
-      height: root ? root.iconSize : 0
+      width: root ? root.baseIconArt : 0
+      height: width
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: gitem.hasRunningApps ? Style.space(5) : Math.round((iconSlot.height - height) / 2)
+      anchors.bottomMargin: root ? root.iconArtBottom : 0
       scale: gitem.magnifyScale
       transformOrigin: Item.Bottom
 
