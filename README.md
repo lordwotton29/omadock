@@ -360,7 +360,8 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
 | `showBorder` | `bool` | `true` | Draws the rim around the dock. |
 | `borderWidth` | `number` | `1.5` | Rim width in pixels, `1`–`6`. |
 | `shadowStrength` | `number` | `0.4` | Shadow opacity, `0.0`–`1.0`. |
-| `blur` | `string` | `"system"` | Blur behind the dock: `"system"` (your Hyprland layer rules decide), `"on"` or `"off"` (a runtime layer rule overrides them). The strength is Hyprland's global `decoration:blur` size. |
+| `blur` | `string` | `"system"` | Blur behind the dock: `"system"` (your Hyprland layer rules decide), `"on"` or `"off"` (a runtime layer rule overrides them). |
+| `blurSize` | `int` | unset | With `blur: "on"`, Hyprland's blur size `1`–`20`. Hyprland has one blur size for everything, so this applies globally; the previous value (`systemBlurSize`, recorded automatically) comes back when blur leaves `"on"`. |
 | `iconStyle` | `string` | `"original"` | `"original"`, `"mono"` (one theme colour, shading kept), `"pixel"` (coarse grid, unsmoothed) or `"dots"` (dithered dot matrix). |
 | `iconTint` | `string` | `"text"` | Colour for `mono` and `dots`: the dock's `"text"` colour or the theme `"accent"`. |
 | `iconGrid` | `int` | `16` | Pixels / dots across an icon for `pixel` and `dots` (`8`–`32`). |
