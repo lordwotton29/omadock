@@ -947,6 +947,7 @@ PanelWindow {
             options: [
               { value: "theme", label: "Theme" },
               { value: "rounded", label: "Rounded" },
+              { value: "square", label: "Square" },
               { value: "none", label: "None" }
             ]
             value: root ? root.groupStyle : "theme"
