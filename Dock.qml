@@ -906,7 +906,9 @@ Item {
   Process {
     id: folderStackScanner
     property string targetFolder: ""
-    command: ["python3", "-c", "import os, json, time, sys\nfolder = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 else ''\nif not folder or not os.path.exists(folder):\n    print(json.dumps({'count':0,'items':[],'folder':folder}))\n    sys.exit(0)\nentries = []\ntry:\n    for entry in os.scandir(folder):\n        try:\n            if entry.name.startswith('.'):\n                continue\n            stat = entry.stat()\n            is_dir = entry.is_dir()\n            size_bytes = stat.st_size if not is_dir else 0\n            if size_bytes < 1024:\n                size_str = f'{size_bytes} B'\n            elif size_bytes < 1024 * 1024:\n                size_str = f'{size_bytes / 1024:.1f} KB'\n            elif size_bytes < 1024 * 1024 * 1024:\n                size_str = f'{size_bytes / (1024 * 1024):.1f} MB'\n            else:\n                size_str = f'{size_bytes / (1024 * 1024 * 1024):.1f} GB'\n            diff = time.time() - stat.st_mtime\n            if diff < 60:\n                time_str = 'Just now'\n            elif diff < 3600:\n                time_str = f'{int(diff // 60)}m ago'\n            elif diff < 86400:\n                time_str = f'{int(diff // 3600)}h ago'\n            else:\n                time_str = f'{int(diff // 86400)}d ago'\n            ext = os.path.splitext(entry.name)[1].lower()\n            is_img = ext in ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif']\n            if is_dir:\n                icon = 'folder'\n            elif is_img:\n                icon = 'image-x-generic'\n            elif ext in ['.mp4', '.mkv', '.webm', '.mov', '.avi']:\n                icon = 'video-x-generic'\n            elif ext in ['.mp3', '.flac', '.wav', '.ogg', '.m4a']:\n                icon = 'audio-x-generic'\n            elif ext in ['.zip', '.tar', '.gz', '.xz', '.7z', '.rar']:\n                icon = 'package-x-generic'\n            elif ext in ['.pdf']:\n                icon = 'application-pdf'\n            elif ext in ['.txt', '.md', '.json', '.qml', '.py', '.cpp', '.js', '.lua', '.rs', '.go', '.html', '.css']:\n                icon = 'text-x-generic'\n            else:\n                icon = 'application-x-executable'\n            entries.append({'name': entry.name, 'path': entry.path, 'isDir': is_dir, 'isImage': is_img, 'size': size_str, 'time': time_str, 'mtime': stat.st_mtime, 'icon': icon})\n        except Exception:\n            pass\nexcept Exception:\n    pass\nentries.sort(key=lambda x: x['mtime'], reverse=True)\nprint(json.dumps({'count': len(entries), 'items': entries[:16], 'folder': folder}))\n", folderStackScanner.targetFolder]
+    property string sortKey: "modified"
+    // scripts/list-folder.py lists, sorts and caps the folder (see its header).
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
@@ -3131,6 +3133,7 @@ Item {
     root.activeStackX = cx
     root.activeStackEntries = []
     folderStackScanner.targetFolder = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    folderStackScanner.sortKey = root.folderSortFor(path)
     folderStackScanner.running = true
     root.syncVisibility()
   }
@@ -3151,6 +3154,46 @@ Item {
     root.contextY = cy
     root.contextAppId = "__folder_context__"
     root.syncVisibility()
+  }
+
+  // Per-folder stack order, stored on the pinned entry (see list-folder.py).
+  readonly property var folderSortLabels: ({
+    name: "Name",
+    kind: "Kind",
+    modified: "Date Modified",
+    added: "Date Added",
+    size: "Size"
+  })
+
+  function folderSortFor(path) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
+        return list[i].sort || "modified"
+    }
+    return "modified"
+  }
+
+  function setFolderSort(path, sort) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var next = []
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i]
+      if ((f.path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
+        f = Object.assign({}, f, { sort: sort })
+      next.push(f)
+    }
+    root.pinnedFolders = next
+    root.saveConfig()
+    // Re-list an open stack of this folder in its new order.
+    var open = String(root.activeStackFolder || "").replace(/^~/, Quickshell.env("HOME"))
+    if (open === norm) {
+      if (folderStackScanner.running) folderStackScanner.running = false
+      folderStackScanner.sortKey = sort
+      folderStackScanner.running = true
+    }
   }
 
   function isFolderPinned(path) {
