@@ -102,20 +102,16 @@ Item {
         }
       }
 
-      // Frosted Folder Tile Container (macOS / iOS Launchpad Folder style).
-      // groupStyle picks the frame: the theme's card look, a softly rounded
-      // rim, a square rim, or none at all (just the mini-icon grid).
+      // Folder tile (macOS / iOS Launchpad folder style). groupStyle picks
+      // the frame: a softly rounded rim, a square rim, or none at all (just
+      // the mini-icon grid).
       Rectangle {
         id: folderTile
-        readonly property string tileStyle: root ? root.groupStyle : "theme"
+        readonly property string tileStyle: root ? root.groupStyle : "rounded"
         anchors.fill: parent
-        readonly property bool lightRim: tileStyle === "rounded" || tileStyle === "square"
-        radius: tileStyle === "rounded" ? Math.round(width * 0.18)
-          : tileStyle === "square" ? 0
-          : (root ? Math.min(root.effectiveCardRadius, width / 2) : Style.cornerRadius)
-        color: tileStyle === "none" ? "transparent"
-          : Util.alpha(Color.bar.background, lightRim ? 0.4 : 0.65)
-        border.color: Util.alpha(Color.menu.border, lightRim ? 0.45 : 0.65)
+        radius: tileStyle === "rounded" ? Math.round(width * 0.18) : 0
+        color: tileStyle === "none" ? "transparent" : Util.alpha(Color.bar.background, 0.4)
+        border.color: Util.alpha(Color.menu.border, 0.45)
         border.width: tileStyle === "none" ? 0 : 1
 
         // Empty folder fallback icon

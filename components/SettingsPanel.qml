@@ -958,12 +958,11 @@ PanelWindow {
               label: "Tile style"
               hint: "Frame drawn around a group's icons in the dock."
               options: [
-                { value: "theme", label: "Theme" },
                 { value: "rounded", label: "Rounded" },
                 { value: "square", label: "Square" },
                 { value: "none", label: "None" }
               ]
-              value: root ? root.groupStyle : "theme"
+              value: root ? root.groupStyle : "rounded"
               onPicked: function(v) { root.setOption("groupStyle", v) }
             }
 
