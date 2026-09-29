@@ -1070,7 +1070,7 @@ PanelWindow {
             }
             ChoiceRow {
               label: "Icon style"
-              hint: "Theme applies the style from Effects to the icons inside groups."
+              hint: "Theme applies the style from Effects to the icons of an opened group."
               options: [
                 { value: "theme", label: "Theme" },
                 { value: "none", label: "None" }

@@ -759,8 +759,8 @@ Item {
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
   // without rounding) or "none" (bare mini-icon grid).
   property string groupStyle: "rounded"
-  // Icons inside group tiles: "theme" follows iconStyle, "none" keeps them
-  // original.
+  // Icons in an opened group (AppGroupPopup): "theme" follows iconStyle,
+  // "none" keeps them original. The tile on the dock always follows it.
   property string groupIconEffects: "theme"
   property bool settingsPanelOpen: false
   property string settingsPanelPage: "appearance"
