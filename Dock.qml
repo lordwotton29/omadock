@@ -917,7 +917,10 @@ Item {
 
   Process {
     id: customFolderPickerProc
-    command: ["python3", "-c", "import sys, subprocess, shutil\ntry:\n    import gi\n    gi.require_version('Gtk', '3.0')\n    from gi.repository import Gtk\n    dialog = Gtk.FileChooserDialog(title='Select Folder to Pin to Dock', action=Gtk.FileChooserAction.SELECT_FOLDER)\n    dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)\n    res = dialog.run()\n    if res == Gtk.ResponseType.OK:\n        print(dialog.get_filename())\n    dialog.destroy()\nexcept Exception:\n    if shutil.which('zenity'):\n        res = subprocess.run(['zenity', '--file-selection', '--directory', '--title=Select Folder to Pin to Dock'], capture_output=True, text=True)\n        if res.returncode == 0 and res.stdout.strip():\n            print(res.stdout.strip())\n    elif shutil.which('kdialog'):\n        res = subprocess.run(['kdialog', '--getexistingdirectory', '--title', 'Select Folder to Pin to Dock'], capture_output=True, text=True)\n        if res.returncode == 0 and res.stdout.strip():\n            print(res.stdout.strip())\n"]
+    // Goes through the XDG FileChooser portal, so the picker is whatever the
+    // desktop routes FileChooser to (the default file manager when it ships a
+    // portal backend); a GTK dialog, zenity or kdialog are fallbacks.
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/pick-folder.py").toString().replace(/^file:\/\//, ""))]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
@@ -980,6 +983,18 @@ Item {
         root.scanRemovableDrives()
       }
     }
+  }
+
+  // A chooser closed by the compositor rather than through its own Cancel may
+  // never answer the portal, which would leave the picker process waiting and
+  // swallow every later click. Asking again restarts it instead.
+  function pickCustomFolder() {
+    if (customFolderPickerProc.running) {
+      customFolderPickerProc.running = false
+      Qt.callLater(function() { customFolderPickerProc.running = true })
+      return
+    }
+    customFolderPickerProc.running = true
   }
 
   function scanRemovableDrives() {

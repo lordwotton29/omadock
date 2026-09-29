@@ -866,7 +866,7 @@ PanelWindow {
               bordered: true
               onClicked: {
                 panel.close()
-                if (root.customFolderPickerProc) root.customFolderPickerProc.running = true
+                root.pickCustomFolder()
               }
             }
           }
