@@ -1357,7 +1357,10 @@ Item {
   onActiveAppGroupIdChanged: root.syncVisibility()
   onDragAppIdChanged: root.syncVisibility()
   onSettingsPanelOpenChanged: root.syncVisibility()
-  onExternalDragOverChanged: root.syncVisibility()
+  onExternalDragOverChanged: {
+    if (!root.externalDragOver) root.dropPreviewPath = ""
+    root.syncVisibility()
+  }
   onAutohideChanged: root.syncVisibility()
   onIntelligentAutohideChanged: {
     if (root.intelligentAutohide) debounceOverlapTimer.restart()
@@ -1938,6 +1941,40 @@ Item {
   // handlers do not fire during a drag, so the drop areas report it here to
   // keep (or bring) the dock in view.
   property bool externalDragOver: false
+  // While a folder is dragged over the dock: its path once confirmed to be a
+  // directory, and where among the pinned folders it would land (0..count).
+  // The folder row opens a gap there, the way the macOS dock does.
+  property string dropPreviewPath: ""
+  property int dropInsertIndex: -1
+
+  // Called on drag enter: finds the first directory among the dragged URLs.
+  function previewDraggedFolder(urls) {
+    root.dropPreviewPath = ""
+    var paths = root.localPathsFromUrls(urls)
+    if (paths.length === 0) return
+    if (dropFolderProbe.running) dropFolderProbe.running = false
+    dropFolderProbe.command = ["sh", "-c", 'for p; do [ -d "$p" ] && { printf "%s\\n" "$p"; exit 0; }; done', "sh"].concat(paths)
+    dropFolderProbe.running = true
+  }
+
+  Process {
+    id: dropFolderProbe
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (root.externalDragOver && line) root.dropPreviewPath = String(line)
+      }
+    }
+  }
+
+  function insertFolderPin(path, name, icon, index) {
+    if (root.isFolderPinned(path)) return
+    var next = (root.pinnedFolders || []).slice()
+    var at = (index >= 0 && index <= next.length) ? index : next.length
+    next.splice(at, 0, { path: path, name: name || "Folder", icon: icon || DockModel.folderIconFor(path, "") })
+    root.pinnedFolders = next
+    root.saveConfig()
+  }
 
   function localPathsFromUrls(urls) {
     var out = []
@@ -1952,6 +1989,9 @@ Item {
 
   function pinDroppedFolders(urls) {
     var paths = root.localPathsFromUrls(urls)
+    dropFolderCheck.insertAt = root.dropInsertIndex
+    root.dropPreviewPath = ""
+    root.dropInsertIndex = -1
     if (paths.length === 0) return
     // Only directories are pinned; the check runs out of process.
     dropFolderCheck.command = ["sh", "-c", 'for p; do [ -d "$p" ] && printf "%s\\n" "$p"; done', "sh"].concat(paths)
@@ -1960,6 +2000,9 @@ Item {
 
   Process {
     id: dropFolderCheck
+    // Where the next confirmed folder goes; -1 appends. Advances per folder
+    // so several dropped at once keep their order.
+    property int insertAt: -1
     running: false
     stdout: SplitParser {
       onRead: function(line) {
@@ -1967,7 +2010,8 @@ Item {
         if (chosen === "" || root.isFolderPinned(chosen)) return
         var home = Quickshell.env("HOME")
         var relPath = (chosen === home || chosen.indexOf(home + "/") === 0) ? "~" + chosen.slice(home.length) : chosen
-        root.toggleFolderPin(relPath, chosen.split("/").pop() || "Folder", DockModel.folderIconFor(relPath, ""))
+        root.insertFolderPin(relPath, chosen.split("/").pop() || "Folder", DockModel.folderIconFor(relPath, ""), dropFolderCheck.insertAt)
+        if (dropFolderCheck.insertAt >= 0) dropFolderCheck.insertAt++
       }
     }
   }
