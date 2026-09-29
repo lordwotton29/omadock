@@ -154,9 +154,12 @@ $$\text{scale}(d) = 1 + (\text{peak} - 1) \cdot \frac{1 + \cos\left(\frac{\pi \c
 
 Pin directories like `~/Downloads`, `~/Projects`, or custom paths directly to your dock:
 
-- **Recent files popover** — up to 16 newest files with icons, sizes, and relative times.
-- **Direct opening** — click any file (`xdg-open`) or jump to its folder.
-- **GTK folder dialog** — attach custom folders from Settings.
+- **Files popover** — up to 16 entries with icons, sizes, and relative times.
+- **Sort By** — right-click the folder: Name, Kind, Date Modified, Date Added or Size, saved per folder.
+- **Direct opening** — click any file to open it in its default app (`xdg-open`), or jump to its folder.
+- **Drag out** — drag a file from the popover into a file manager, browser or chat app.
+- **Drop in** — drop a folder from your file manager onto the dock to pin it.
+- **Folder picker** — attach custom folders from Settings through the desktop's file chooser (`omarchy-file-select` / XDG portal).
 
 ---
 

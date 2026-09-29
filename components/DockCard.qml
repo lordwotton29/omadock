@@ -22,6 +22,7 @@ Item {
   property alias runningRepeater: runningRepeater
   property alias foldersRepeater: foldersRepeater
   property alias drivesRepeater: drivesRepeater
+  readonly property bool folderDropActive: folderDrop.containsDrag
 
   function handleDragMoved(aid, mx) {
     if (!root) return
@@ -163,6 +164,25 @@ Item {
     HoverHandler {
       id: hitboxHover
       onHoveredChanged: if (root) root.syncVisibility()
+    }
+
+    // Folders dragged in from a file manager get pinned as stacks.
+    DropArea {
+      id: folderDrop
+      anchors.fill: parent
+      keys: ["text/uri-list"]
+      onEntered: function(drag) {
+        if (root) root.externalDragOver = true
+        drag.accept(Qt.LinkAction)
+      }
+      onExited: if (root) root.externalDragOver = false
+      onDropped: function(drop) {
+        if (root) {
+          root.externalDragOver = false
+          root.pinDroppedFolders(drop.urls)
+        }
+        drop.accept(Qt.LinkAction)
+      }
     }
   }
 
@@ -477,6 +497,17 @@ Item {
           }
         }
       }
+    }
+
+    // Outline while a drag from outside hovers the dock (see folderDrop).
+    Rectangle {
+      anchors.fill: parent
+      visible: root ? root.externalDragOver : false
+      color: Util.alpha(Color.accent, 0.08)
+      radius: dockCard.radius
+      border.color: Color.accent
+      border.width: 2
+      z: 20
     }
 
     // Drop indicator line

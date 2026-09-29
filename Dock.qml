@@ -1315,7 +1315,7 @@ Item {
       return
     }
 
-    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen
+    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen || root.externalDragOver
 
     // Hovered, Context Menu Open, or Dragging: keep visible
     if (isHovered) {
@@ -1345,6 +1345,7 @@ Item {
   onActiveAppGroupIdChanged: root.syncVisibility()
   onDragAppIdChanged: root.syncVisibility()
   onSettingsPanelOpenChanged: root.syncVisibility()
+  onExternalDragOverChanged: root.syncVisibility()
   onAutohideChanged: root.syncVisibility()
   onIntelligentAutohideChanged: {
     if (root.intelligentAutohide) debounceOverlapTimer.restart()
@@ -1915,6 +1916,45 @@ Item {
     }
     Quickshell.execDetached(["hyprctl", "eval", lua])
     root._appliedBlurMode = root.blurMode
+  }
+
+  // ------------------------------------------------- drops from outside
+  // Folders dragged in from a file manager are pinned as stacks. Hover
+  // handlers do not fire during a drag, so the drop areas report it here to
+  // keep (or bring) the dock in view.
+  property bool externalDragOver: false
+
+  function localPathsFromUrls(urls) {
+    var out = []
+    for (var i = 0; i < (urls ? urls.length : 0); i++) {
+      var u = String(urls[i])
+      if (u.indexOf("file://") !== 0) continue
+      var p = decodeURIComponent(u.slice(7))
+      if (p.charAt(0) === "/") out.push(p)
+    }
+    return out
+  }
+
+  function pinDroppedFolders(urls) {
+    var paths = root.localPathsFromUrls(urls)
+    if (paths.length === 0) return
+    // Only directories are pinned; the check runs out of process.
+    dropFolderCheck.command = ["sh", "-c", 'for p; do [ -d "$p" ] && printf "%s\\n" "$p"; done', "sh"].concat(paths)
+    dropFolderCheck.running = true
+  }
+
+  Process {
+    id: dropFolderCheck
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        var chosen = String(line || "").replace(/\/+$/, "")
+        if (chosen === "" || root.isFolderPinned(chosen)) return
+        var home = Quickshell.env("HOME")
+        var relPath = (chosen === home || chosen.indexOf(home + "/") === 0) ? "~" + chosen.slice(home.length) : chosen
+        root.toggleFolderPin(relPath, chosen.split("/").pop() || "Folder", DockModel.folderIconFor(relPath, ""))
+      }
+    }
   }
 
   function setBlurMode(mode) {
@@ -3330,6 +3370,14 @@ Item {
       HoverHandler {
         id: revealHover
         onHoveredChanged: root.syncVisibility()
+      }
+
+      // A drag reaching the edge reveals a hidden dock, like hovering does.
+      DropArea {
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onEntered: root.externalDragOver = true
+        onExited: if (!dockCardComp.folderDropActive) root.externalDragOver = false
       }
 
       Rectangle {
