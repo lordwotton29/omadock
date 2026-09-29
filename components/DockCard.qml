@@ -227,7 +227,7 @@ Item {
       return root.dockBgColor
     }
 
-    readonly property real effectiveBorderWidth: 1.5
+    readonly property real effectiveBorderWidth: root ? root.borderWidth : 1.5
     readonly property color effectiveBorderColor: {
       if (!root) return Util.alpha(Color.menu.border, 0.48)
       // Specular Frosted Glass Rim: Crisp highlight with high alpha for contrast on dark and light surfaces

@@ -747,6 +747,8 @@ Item {
   // Without a card to cast one, each icon casts its own shadow.
   readonly property bool iconShadow: root.showShadow && !root.showBackground && root.shadowStrength > 0
   property bool showBorder: true
+  // Rim width in logical pixels, 1..6.
+  property real borderWidth: 1.5
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
   // without rounding) or "none" (bare mini-icon grid).
   property string groupStyle: "rounded"
@@ -1817,6 +1819,9 @@ Item {
       : 16
     root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
+    root.borderWidth = parsed && typeof parsed.borderWidth === "number"
+      ? Math.max(1, Math.min(6, parsed.borderWidth))
+      : 1.5
     // Anything else, including the retired "theme" style, falls back to rounded.
     root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
@@ -2833,6 +2838,7 @@ Item {
     conf.iconTint = root.iconTint
     conf.iconGrid = root.iconGrid
     conf.showBorder = root.showBorder
+    conf.borderWidth = root.borderWidth
     conf.groupStyle = root.groupStyle
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing

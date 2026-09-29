@@ -164,6 +164,8 @@ PanelWindow {
     property real step: 1
     property string suffix: ""
     property real displayScale: 1
+    // Decimals shown next to the slider (0 rounds to whole numbers).
+    property int displayDecimals: 0
     signal committed(real value)
 
     // PanelSlider reads its palette from a bar-shaped object.
@@ -198,7 +200,7 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(52)
         horizontalAlignment: Text.AlignRight
-        text: Math.round(slider.liveValue * sliderRow.displayScale) + sliderRow.suffix
+        text: (slider.liveValue * sliderRow.displayScale).toFixed(sliderRow.displayDecimals) + sliderRow.suffix
         color: Util.alpha(Color.menu.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.body
@@ -614,6 +616,17 @@ PanelWindow {
               hint: "Thin rim around the dock."
               checked: root ? root.showBorder : true
               onToggled: root.setOption("showBorder", !root.showBorder)
+            }
+            SliderRow {
+              label: "Border width"
+              visible: root ? root.showBorder : true
+              minimum: 1
+              maximum: 6
+              step: 0.5
+              suffix: " px"
+              displayDecimals: 1
+              value: root ? root.borderWidth : 1.5
+              onCommitted: function(v) { root.setOption("borderWidth", Math.round(v * 2) / 2) }
             }
             SwitchRow {
               label: "Border opacity from theme"
