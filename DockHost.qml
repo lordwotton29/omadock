@@ -139,6 +139,24 @@ Item {
       for (var i = 0; i < d.length; i++) d[i].dockVisible = false
     }
 
+    // The settings panel opens on the focused monitor's dock.
+    function openSettings(): void {
+      var d = host.orderedDocks()
+      if (d.length > 0) d[0].openSettingsPanel()
+    }
+
+    function openSettingsPage(page: string): void {
+      var d = host.orderedDocks()
+      if (d.length === 0) return
+      d[0].settingsPanelPage = page
+      d[0].openSettingsPanel()
+    }
+
+    function closeSettings(): void {
+      var d = host.orderedDocks()
+      for (var i = 0; i < d.length; i++) d[i].closeSettingsPanel()
+    }
+
     // Alignment is a config key; the other docks pick it up from the file.
     function setAlignment(align: string): void {
       var d = host.orderedDocks()

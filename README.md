@@ -208,7 +208,13 @@ Deep Linux desktop and compositor integration:
 
 ## 🎨 Customization & Theming
 
-Right-click the Omarchy logo or empty dock space to access deep customization:
+Right-click the Omarchy logo or empty dock space to access deep customization.
+
+### 🎛️ Settings Panel
+
+Right-clicking either one opens the full settings panel directly: a sidebar with *Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders* and *App Groups*, with switches, sliders and dropdowns for every option. Changes apply live, so the dock underneath previews them. Close it with <kbd>Esc</kbd>, the close button, or a click outside. The panel can also be opened from a keybind: `omarchy-shell omadock openSettings`.
+
+The settings at a glance:
 
 <div align="center">
   <table>
@@ -295,6 +301,10 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
   "opacity": 1.0,
   "shape": "rounded",
   "bgColor": "theme",
+  "showBackground": true,
+  "showShadow": true,
+  "showBorder": true,
+  "borderOpacity": "theme",
   "itemSpacing": 4,
   "iconSize": 0,
   "hoverEffect": "zoom",
@@ -337,6 +347,9 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
 | `opacity` | `number \| str` | `1.0` | Background opacity: `"theme"`, `1.0`, `0.80`, `0.65`, `0.35`, `0.0`. |
 | `shape` | `string` | `"rounded"` | Dock geometry: `"rounded"`, `"round"` (pill), `"square"`, `"theme"`. |
 | `bgColor` | `string` | `"theme"` | `"theme"`, `"none"`, or custom hex string (`"#1e1e2e"`). |
+| `showBackground` | `bool` | `true` | Draws the dock's background fill. `false` leaves the icons floating. |
+| `showShadow` | `bool` | `true` | Draws the soft drop shadow under the dock. |
+| `showBorder` | `bool` | `true` | Draws the rim around the dock. |
 | `folderColor` | `string` | `"theme"` | `"theme"`, `"symbolic"`, `"white"`, `"black"`, `"Yaru-blue"`, etc. |
 | `hoverEffect` | `string` | `"zoom"` | Hover growth mode: `"zoom"`, `"wave"`, or `"off"`. |
 | `revealDelay` | `int` | `160` | Edge dwell time in milliseconds before unhiding ($0$–$2000$). |
@@ -374,6 +387,9 @@ Additional IPC methods available:
 - `hide`: Force dock to slide out of view.
 - `setAlignment("center" | "left" | "right")`: Change dock alignment dynamically.
 - `setPosition("bottom" | "top" | "left" | "right")`: Change dock edge position.
+- `openSettings`: Open the settings panel on the focused monitor's dock.
+- `openSettingsPage("appearance" | "placement" | "behavior" | "effects" | "size" | "folders" | "groups")`: Open the settings panel on a given page.
+- `closeSettings`: Close the settings panel.
 
 > [!NOTE]
 > The `-p /usr/share/omarchy/shell` flag is mandatory to target the active Omarchy system shell instance.

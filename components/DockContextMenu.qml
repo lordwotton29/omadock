@@ -97,6 +97,14 @@ BorderSurface {
         }
 
         ContextRow {
+          text: "Dock Settings…"
+          textColor: Color.accent
+          onTriggered: { if (root) root.openSettingsPanel() }
+        }
+
+        MenuDivider {}
+
+        ContextRow {
           text: "Appearance ›"
           onTriggered: { if (root) root.settingsSubmenu = "appearance" }
         }
