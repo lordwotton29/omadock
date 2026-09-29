@@ -70,6 +70,7 @@ Item {
       grid: root ? root.iconGrid : 16
       dropShadow: root ? root.iconShadow : false
       shadowStrength: root ? root.shadowStrength : 0.4
+      showOriginal: root ? (root.iconHoverOriginal && driveArea.containsMouse) : false
     }
   }
 

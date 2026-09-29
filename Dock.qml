@@ -750,6 +750,8 @@ Item {
   property string iconTint: "text"
   // Cells across an icon for the pixel and dots styles.
   property int iconGrid: 16
+  // With an icon style on: show the hovered icon as shipped.
+  property bool iconHoverOriginal: false
   readonly property color iconTintColor: root.iconTint === "accent" ? Color.accent : root.dockForeground
   // Without a card to cast one, each icon casts its own shadow.
   readonly property bool iconShadow: root.showShadow && !root.showBackground && root.shadowStrength > 0
@@ -1827,6 +1829,7 @@ Item {
     root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
     root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
     root.iconTint = (parsed && parsed.iconTint === "accent") ? "accent" : "text"
+    root.iconHoverOriginal = parsed ? parsed.iconHoverOriginal === true : false
     root.iconGrid = parsed && typeof parsed.iconGrid === "number"
       ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
       : 16
@@ -2932,6 +2935,7 @@ Item {
     if (root.systemBlurSize > 0) conf.systemBlurSize = root.systemBlurSize
     conf.iconStyle = root.iconStyle
     conf.iconTint = root.iconTint
+    conf.iconHoverOriginal = root.iconHoverOriginal
     conf.iconGrid = root.iconGrid
     conf.showBorder = root.showBorder
     conf.borderWidth = root.borderWidth

@@ -871,6 +871,13 @@ PanelWindow {
               value: root ? root.iconGrid : 16
               onCommitted: function(v) { root.setOption("iconGrid", Math.round(v)) }
             }
+            SwitchRow {
+              label: "Show original on hover"
+              hint: "The icon under the pointer drops the style and shows as shipped. Icons in an opened group follow this too."
+              visible: root ? root.iconStyle !== "original" : false
+              checked: root ? root.iconHoverOriginal : false
+              onToggled: root.setOption("iconHoverOriginal", !root.iconHoverOriginal)
+            }
 
             SectionLabel { text: "Motion" }
 

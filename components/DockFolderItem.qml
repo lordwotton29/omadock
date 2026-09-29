@@ -79,7 +79,7 @@ Item {
 
       // Symbolic icons keep their own recolouring in the original style;
       // every other case goes through the dock's icon style.
-      readonly property bool themedSymbolic: fitem.isSymbolic && (!root || root.iconStyle === "original")
+      readonly property bool themedSymbolic: fitem.isSymbolic && (!root || root.iconStyle === "original" || (root.iconHoverOriginal && area.containsMouse))
 
       DockIconArt {
         id: folderIconImg
@@ -92,6 +92,7 @@ Item {
         grid: root ? root.iconGrid : 16
         dropShadow: root ? root.iconShadow : false
         shadowStrength: root ? root.shadowStrength : 0.4
+        showOriginal: root ? (root.iconHoverOriginal && area.containsMouse) : false
       }
 
       Item {
