@@ -22,8 +22,11 @@ Item {
   property int grid: 16
   property bool dropShadow: false
   property real shadowStrength: 0.4
-  // Rasterise at least this many device pixels across, so zoom stays crisp.
-  property real renderSize: width
+  // Size (logical px) the icon is decoded at. Keep it fixed: tying it to the
+  // animated width makes every zoom frame decode the icon again, and with
+  // asynchronous loading the icon blinks out between frames. Callers pass
+  // their largest on-screen size so zoom stays crisp.
+  property real renderSize: 64
 
   readonly property bool usesGrid: art.iconStyle === "pixel" || art.iconStyle === "dots"
   readonly property int cells: Math.max(6, Math.min(48, art.grid))
@@ -75,7 +78,7 @@ Item {
           sourceItem: img
           textureSize: art.iconStyle === "dots"
             ? Qt.size(art.cells * 2, art.cells * 2)
-            : Qt.size(Math.max(16, art.width * Screen.devicePixelRatio), Math.max(16, art.height * Screen.devicePixelRatio))
+            : Qt.size(Math.max(16, art.renderSize * Screen.devicePixelRatio), Math.max(16, art.renderSize * Screen.devicePixelRatio))
           smooth: true
           live: true
         }

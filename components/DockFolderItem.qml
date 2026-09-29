@@ -72,7 +72,7 @@ Item {
         id: folderIconImg
         anchors.fill: parent
         source: fitem.resolvedSource
-        renderSize: (root ? root.iconSize : 36) * 2
+        renderSize: root ? root.maxIconArt : 64
         visible: !iconContainer.themedSymbolic
         iconStyle: root ? root.iconStyle : "original"
         tint: root ? root.iconTintColor : Color.bar.text

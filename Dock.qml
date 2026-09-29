@@ -339,6 +339,9 @@ Item {
   readonly property real zoomPeak: 1.22
   readonly property real magnifyRange: root.iconSlot * 2.2
   readonly property real baseIconArt: root.iconSize - Style.space(4)
+  // Largest size an icon reaches under either hover effect; icons decode at
+  // this size once instead of on every animation frame.
+  readonly property real maxIconArt: Math.ceil(root.baseIconArt * Math.max(root.zoomPeak, root.magnifyPeak))
 
   // Shared slot geometry. Every item (apps, groups, folders, drives, the
   // Omarchy button) draws its artwork in the same baseIconArt box, centred in
