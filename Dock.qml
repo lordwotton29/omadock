@@ -730,6 +730,9 @@ Item {
   property bool showBackground: true
   property bool showShadow: true
   property bool showBorder: true
+  // App group tile look: "theme" (card radius, frosted fill, rim),
+  // "rounded" (softly rounded rim) or "none" (bare mini-icon grid).
+  property string groupStyle: "theme"
   property bool settingsPanelOpen: false
   property string settingsPanelPage: "appearance"
   property int themeVersion: 0
@@ -1765,6 +1768,7 @@ Item {
     root.showBackground = parsed ? parsed.showBackground !== false : true
     root.showShadow = parsed ? parsed.showShadow !== false : true
     root.showBorder = parsed ? parsed.showBorder !== false : true
+    root.groupStyle = (parsed && (parsed.groupStyle === "rounded" || parsed.groupStyle === "none")) ? parsed.groupStyle : "theme"
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
     root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
     if (parsed && typeof parsed.minimizeMode === "string") {
@@ -2708,6 +2712,7 @@ Item {
     conf.showBackground = root.showBackground
     conf.showShadow = root.showShadow
     conf.showBorder = root.showBorder
+    conf.groupStyle = root.groupStyle
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
     conf.minimizeMode = root.minimizeMode

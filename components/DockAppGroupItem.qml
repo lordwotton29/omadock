@@ -101,14 +101,20 @@ Item {
         }
       }
 
-      // Frosted Folder Tile Container (macOS / iOS Launchpad Folder style)
+      // Frosted Folder Tile Container (macOS / iOS Launchpad Folder style).
+      // groupStyle picks the frame: the theme's card look, a softly rounded
+      // rim, or none at all (just the mini-icon grid).
       Rectangle {
         id: folderTile
+        readonly property string tileStyle: root ? root.groupStyle : "theme"
         anchors.fill: parent
-        radius: root ? root.effectiveCardRadius : Style.cornerRadius
-        color: Util.alpha(Color.bar.background, 0.65)
-        border.color: Util.alpha(Color.menu.border, 0.65)
-        border.width: 1
+        radius: tileStyle === "rounded"
+          ? Math.round(width * 0.24)
+          : (root ? Math.min(root.effectiveCardRadius, width / 2) : Style.cornerRadius)
+        color: tileStyle === "none" ? "transparent"
+          : Util.alpha(Color.bar.background, tileStyle === "rounded" ? 0.4 : 0.65)
+        border.color: Util.alpha(Color.menu.border, tileStyle === "rounded" ? 0.45 : 0.65)
+        border.width: tileStyle === "none" ? 0 : 1
 
         // Empty folder fallback icon
         Image {
@@ -133,7 +139,8 @@ Item {
             model: gitem.groupApps.slice(0, 4)
             delegate: Item {
               id: miniCell
-              readonly property real miniSize: Math.round(iconContainer.width * 0.36)
+              // Without a frame the grid can use the whole tile.
+              readonly property real miniSize: Math.round(iconContainer.width * (folderTile.tileStyle === "none" ? 0.46 : 0.36))
               width: miniSize
               height: miniSize
 
