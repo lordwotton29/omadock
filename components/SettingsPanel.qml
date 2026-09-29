@@ -692,6 +692,17 @@ PanelWindow {
               }
               onPicked: function(v) { root.setDockShape(v) }
             }
+            ChoiceRow {
+              label: "Indicators"
+              hint: "The dots and bars under icons. Theme follows the corners above."
+              options: [
+                { value: "theme", label: "Theme" },
+                { value: "rounded", label: "Rounded" },
+                { value: "square", label: "Square" }
+              ]
+              value: root ? root.indicatorShape : "theme"
+              onPicked: function(v) { root.setOption("indicatorShape", v) }
+            }
           }
 
           // ================================================= Placement

@@ -354,6 +354,7 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
 | `showMinimizedTiles` | `bool` | `true` | Displays live screencopy preview tiles for parked windows. |
 | `opacity` | `number \| str` | `1.0` | Background opacity: `"theme"`, `1.0`, `0.80`, `0.65`, `0.35`, `0.0`. |
 | `shape` | `string` | `"rounded"` | Dock geometry: `"rounded"`, `"round"` (pill), `"square"`, `"theme"`. |
+| `indicatorShape` | `string` | `"theme"` | Dots and bars under icons: `"theme"` (follows `shape`), `"rounded"` or `"square"`. |
 | `bgColor` | `string` | `"theme"` | `"theme"`, `"none"`, or custom hex string (`"#1e1e2e"`). |
 | `showBackground` | `bool` | `true` | Draws the dock's background fill. `false` leaves the icons floating. |
 | `showShadow` | `bool` | `true` | Draws the soft drop shadow under the dock. |

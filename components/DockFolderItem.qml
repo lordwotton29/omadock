@@ -121,16 +121,14 @@ Item {
     }
   }
 
-  // Active stack open indicator dot
-  Rectangle {
+  // Open stack: the same accent bar an app with focus shows.
+  DockIndicator {
+    rootRef: fitem.rootRef
     visible: fitem.isOpen
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Style.space(1)
     anchors.horizontalCenter: iconSlot.horizontalCenter
-    width: Style.space(4)
-    height: Style.space(4)
-    radius: width / 2
-    color: Color.accent
+    kind: "active"
   }
 
   MouseArea {

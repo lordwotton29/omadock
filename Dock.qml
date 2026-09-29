@@ -756,6 +756,16 @@ Item {
   // Without a card to cast one, each icon casts its own shadow.
   readonly property bool iconShadow: root.showShadow && !root.showBackground && root.shadowStrength > 0
   property bool showBorder: true
+  // Running/open marks under items: "theme" follows the dock shape,
+  // "rounded" dots and pills, "square" square dots and bars.
+  property string indicatorShape: "theme"
+  readonly property bool indicatorSquare: {
+    if (root.indicatorShape === "square") return true
+    if (root.indicatorShape === "rounded") return false
+    if (root.dockShape === "square") return true
+    if (root.dockShape === "theme" || root.dockShape === "auto") return !(Style.cornerRadius > 0)
+    return false
+  }
   // Rim width in logical pixels, 1..6.
   property real borderWidth: 1.5
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
@@ -1837,6 +1847,7 @@ Item {
     root.systemBlurSize = parsed && typeof parsed.systemBlurSize === "number" ? Math.max(0, Math.round(parsed.systemBlurSize)) : 0
     root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
+    root.indicatorShape = (parsed && (parsed.indicatorShape === "rounded" || parsed.indicatorShape === "square")) ? parsed.indicatorShape : "theme"
     root.borderWidth = parsed && typeof parsed.borderWidth === "number"
       ? Math.max(1, Math.min(6, parsed.borderWidth))
       : 1.5
@@ -2938,6 +2949,7 @@ Item {
     conf.iconHoverOriginal = root.iconHoverOriginal
     conf.iconGrid = root.iconGrid
     conf.showBorder = root.showBorder
+    conf.indicatorShape = root.indicatorShape
     conf.borderWidth = root.borderWidth
     conf.groupStyle = root.groupStyle
     conf.groupIconEffects = root.groupIconEffects
