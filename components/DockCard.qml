@@ -166,27 +166,34 @@ Item {
     }
   }
 
+  // Card shadow: the card's own shape (same radius), blurred and dropped a
+  // little, so a square card casts a square-ish shadow instead of a soft
+  // oval. Only drawn under a visible background; without one, each icon
+  // casts its own shadow instead (see DockIconArt).
   Item {
     id: cardShadow
-    visible: root ? root.showShadow : true
+    readonly property real spread: Style.space(12)
+    visible: root ? (root.showShadow && root.showBackground && root.shadowStrength > 0) : true
     // Follows the card out of view; a blur left behind would hang on screen
     // after the dock has gone.
     opacity: cardWrapper.opacity
     anchors.fill: dockCard
-    anchors.margins: -Style.space(16)
+    anchors.margins: -spread
+    anchors.topMargin: -spread + Style.space(3)
+    anchors.bottomMargin: -spread - Style.space(3)
     z: 0
     layer.enabled: true
     layer.effect: MultiEffect {
       blurEnabled: true
       blur: 1.0
-      blurMax: 36
+      blurMax: 20
     }
 
     Rectangle {
       anchors.fill: parent
-      anchors.margins: Style.space(16)
+      anchors.margins: cardShadow.spread
       radius: dockCard.radius
-      color: Qt.rgba(0, 0, 0, (root && root.dockBgColor === "none") ? 0.52 : 0.40)
+      color: Qt.rgba(0, 0, 0, root ? root.shadowStrength : 0.4)
     }
   }
 

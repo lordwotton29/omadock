@@ -729,6 +729,11 @@ Item {
   property string dockBgColor: "theme"
   property bool showBackground: true
   property bool showShadow: true
+  // Shadow opacity, 0..1.
+  property real shadowStrength: 0.4
+  // Compositor blur behind the dock: "system" leaves it to the user's own
+  // Hyprland layer rules; "on"/"off" add a runtime rule that overrides them.
+  property string blurMode: "system"
   property bool showBorder: true
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
   // without rounding) or "none" (bare mini-icon grid).
@@ -1513,6 +1518,11 @@ Item {
     }
     function onRawEvent(event) {
       var n = String((event && event.name) || "")
+      // A config reload drops runtime layer rules along with the Lua state.
+      if (n === "configreloaded") {
+        root.applyBlurRule(true)
+        return
+      }
       if (n === "openwindow") {
         var rawAddr = String(event.data || "").split(",")[0].trim()
         if (rawAddr.slice(0, 2) === "0x" || rawAddr.slice(0, 2) === "0X") rawAddr = rawAddr.slice(2)
@@ -1781,6 +1791,11 @@ Item {
     root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
     root.showBackground = parsed ? parsed.showBackground !== false : true
     root.showShadow = parsed ? parsed.showShadow !== false : true
+    root.shadowStrength = parsed && typeof parsed.shadowStrength === "number"
+      ? Math.max(0, Math.min(1, parsed.shadowStrength))
+      : 0.4
+    root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
+    root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
     // Anything else, including the retired "theme" style, falls back to rounded.
     root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
@@ -1862,6 +1877,34 @@ Item {
     root.contextX = x
     root.contextY = y
     root.contextAppId = "__dock_settings__"
+  }
+
+  // ------------------------------------------------- compositor blur
+  // Hyprland blurs layers through layer rules, and only globally sized
+  // (decoration.blur), so the dock can switch blur on or off but not set its
+  // strength. The rule lives in a Lua global so a later change (or "system")
+  // can disable it again without reloading the user's config. One dock applies
+  // it: every dock shares the "omadock" namespace.
+  // "" until the first apply, so a rule left behind by an earlier shell
+  // session (the Lua state outlives the shell) is always reconciled.
+  property string _appliedBlurMode: ""
+
+  function applyBlurRule(force) {
+    if (!root.isPrimary) return
+    if (!force && root.blurMode === root._appliedBlurMode) return
+    var lua = "if _G.omadock_blur_rule then _G.omadock_blur_rule:set_enabled(false) end"
+    if (root.blurMode !== "system") {
+      lua += " _G.omadock_blur_rule = hl.layer_rule({ match = { namespace = \"^omadock$\" }, blur = "
+        + (root.blurMode === "on" ? "true" : "false") + ", ignore_alpha = 0.05 })"
+    }
+    Quickshell.execDetached(["hyprctl", "eval", lua])
+    root._appliedBlurMode = root.blurMode
+  }
+
+  function setBlurMode(mode) {
+    root.blurMode = mode
+    root.applyBlurRule(false)
+    root.saveConfig()
   }
 
   function openSettingsPanel() {
@@ -2725,6 +2768,8 @@ Item {
     conf.bgColor = root.dockBgColor
     conf.showBackground = root.showBackground
     conf.showShadow = root.showShadow
+    conf.shadowStrength = root.shadowStrength
+    conf.blur = root.blurMode
     conf.showBorder = root.showBorder
     conf.groupStyle = root.groupStyle
     conf.folderColor = root.folderColor
