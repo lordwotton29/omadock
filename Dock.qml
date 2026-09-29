@@ -734,6 +734,15 @@ Item {
   // Compositor blur behind the dock: "system" leaves it to the user's own
   // Hyprland layer rules; "on"/"off" add a runtime rule that overrides them.
   property string blurMode: "system"
+  // Icon style: "original", "mono", "pixel" or "dots" (see DockIconArt).
+  property string iconStyle: "original"
+  // Colour for the mono and dots styles: the dock's text colour or the accent.
+  property string iconTint: "text"
+  // Cells across an icon for the pixel and dots styles.
+  property int iconGrid: 16
+  readonly property color iconTintColor: root.iconTint === "accent" ? Color.accent : root.dockForeground
+  // Without a card to cast one, each icon casts its own shadow.
+  readonly property bool iconShadow: root.showShadow && !root.showBackground && root.shadowStrength > 0
   property bool showBorder: true
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
   // without rounding) or "none" (bare mini-icon grid).
@@ -1795,6 +1804,11 @@ Item {
       ? Math.max(0, Math.min(1, parsed.shadowStrength))
       : 0.4
     root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
+    root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
+    root.iconTint = (parsed && parsed.iconTint === "accent") ? "accent" : "text"
+    root.iconGrid = parsed && typeof parsed.iconGrid === "number"
+      ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
+      : 16
     root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
     // Anything else, including the retired "theme" style, falls back to rounded.
@@ -2770,6 +2784,9 @@ Item {
     conf.showShadow = root.showShadow
     conf.shadowStrength = root.shadowStrength
     conf.blur = root.blurMode
+    conf.iconStyle = root.iconStyle
+    conf.iconTint = root.iconTint
+    conf.iconGrid = root.iconGrid
     conf.showBorder = root.showBorder
     conf.groupStyle = root.groupStyle
     conf.folderColor = root.folderColor

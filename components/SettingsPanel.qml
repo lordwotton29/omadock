@@ -798,6 +798,41 @@ PanelWindow {
             width: parent.width
             visible: panel.page === "effects"
 
+            SectionLabel { text: "Icons" }
+
+            ChoiceRow {
+              label: "Icon style"
+              hint: "Monochrome and dot matrix take one colour from the theme."
+              options: [
+                { value: "original", label: "Original" },
+                { value: "mono", label: "Monochrome" },
+                { value: "pixel", label: "Pixel" },
+                { value: "dots", label: "Dot matrix" }
+              ]
+              value: root ? root.iconStyle : "original"
+              onPicked: function(v) { root.setOption("iconStyle", v) }
+            }
+            ChoiceRow {
+              label: "Icon colour"
+              visible: root ? (root.iconStyle === "mono" || root.iconStyle === "dots") : false
+              options: [
+                { value: "text", label: "Text" },
+                { value: "accent", label: "Accent" }
+              ]
+              value: root ? root.iconTint : "text"
+              onPicked: function(v) { root.setOption("iconTint", v) }
+            }
+            SliderRow {
+              label: root && root.iconStyle === "dots" ? "Dots across" : "Pixels across"
+              hint: "Fewer is chunkier."
+              visible: root ? (root.iconStyle === "pixel" || root.iconStyle === "dots") : false
+              minimum: 8
+              maximum: 32
+              step: 1
+              value: root ? root.iconGrid : 16
+              onCommitted: function(v) { root.setOption("iconGrid", Math.round(v)) }
+            }
+
             SectionLabel { text: "Motion" }
 
             ChoiceRow {
