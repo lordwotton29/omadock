@@ -1182,6 +1182,18 @@ PanelWindow {
             SectionLabel { text: "Project" }
 
             SettingRow {
+              label: "Version"
+              hint: "The Omadock release this dock is running."
+
+              Text {
+                text: (root && root.manifest && root.manifest.version) ? "v" + root.manifest.version : "unknown"
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.subtitle
+              }
+            }
+
+            SettingRow {
               label: "Omadock"
               hint: "A fluid, zero-CPU dock for Omarchy. Report bugs, follow development, or star the repository."
 
