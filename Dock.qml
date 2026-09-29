@@ -681,6 +681,13 @@ Item {
   property var pinnedFolders: []
   property string activeStackFolder: ""
   property string activeStackName: ""
+  // Directory the open stack is showing: the pinned folder, or one of its
+  // subfolders after clicking into it. activeStackTrail holds the folders
+  // walked through ({ path, name }), so Back can return step by step.
+  property string activeStackPath: ""
+  property var activeStackTrail: []
+  // "stack" (list) or "grid" (larger icons and previews), per pinned folder.
+  readonly property string activeStackView: root.activeStackFolder !== "" ? root.folderViewFor(root.activeStackFolder) : "stack"
   property var activeStackEntries: []
   property int activeStackTotalCount: 0
   property real activeStackX: 0
@@ -913,7 +920,7 @@ Item {
     property string targetFolder: ""
     property string sortKey: "modified"
     // scripts/list-folder.py lists, sorts and caps the folder (see its header).
-    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey]
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey, "300"]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
@@ -923,7 +930,7 @@ Item {
           // folder the user currently has open (or any at all). Prevents a
           // slow older scan from painting one folder's files under another's
           // header, or repopulating after the stack was closed.
-          var wanted = String(root.activeStackFolder || "").replace(/^~/, Quickshell.env("HOME"))
+          var wanted = String(root.activeStackPath || "")
           if (parsed.folder !== wanted) return
           root.activeStackTotalCount = parsed.count || 0
           root.activeStackEntries = parsed.items || []
@@ -3178,19 +3185,48 @@ Item {
     // older scan race the new one.
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = path
-    root.activeStackName = name || "Folder"
     root.activeStackX = cx
-    root.activeStackEntries = []
-    folderStackScanner.targetFolder = (path || "").replace(/^~/, Quickshell.env("HOME"))
-    folderStackScanner.sortKey = root.folderSortFor(path)
-    folderStackScanner.running = true
+    root.activeStackTrail = []
+    root.showStackDir((path || "").replace(/^~/, Quickshell.env("HOME")), name || "Folder")
     root.syncVisibility()
+  }
+
+  // Lists dir in the open stack. Kill any in-flight scan first: assigning
+  // running = true while a process is already running is a no-op in
+  // Quickshell, which used to let a slow older scan race the new one.
+  function showStackDir(dir, name) {
+    if (folderStackScanner.running) folderStackScanner.running = false
+    root.activeStackPath = dir
+    root.activeStackName = name
+    root.activeStackEntries = []
+    root.activeStackTotalCount = 0
+    folderStackScanner.targetFolder = dir
+    folderStackScanner.sortKey = root.folderSortFor(root.activeStackFolder)
+    folderStackScanner.running = true
+  }
+
+  // Step into a subfolder of the open stack.
+  function enterStackDir(dir, name) {
+    var trail = root.activeStackTrail.slice()
+    trail.push({ path: root.activeStackPath, name: root.activeStackName })
+    root.activeStackTrail = trail
+    root.showStackDir(dir, name || dir.split("/").pop() || "Folder")
+  }
+
+  function stackBack() {
+    var trail = root.activeStackTrail.slice()
+    if (trail.length === 0) return
+    var prev = trail.pop()
+    root.activeStackTrail = trail
+    root.showStackDir(prev.path, prev.name)
   }
 
   function closeFolderStack() {
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = ""
     root.activeStackName = ""
+    root.activeStackPath = ""
+    root.activeStackTrail = []
     root.activeStackEntries = []
     root.syncVisibility()
   }
@@ -3224,25 +3260,44 @@ Item {
     return "modified"
   }
 
-  function setFolderSort(path, sort) {
+  function folderViewFor(path) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
+        return list[i].view === "grid" ? "grid" : "stack"
+    }
+    return "stack"
+  }
+
+  // Sets one field (sort, view) on a pinned folder's entry and saves.
+  function setFolderOption(path, key, value) {
     var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
     var next = []
     var list = root.pinnedFolders || []
     for (var i = 0; i < list.length; i++) {
       var f = list[i]
-      if ((f.path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
-        f = Object.assign({}, f, { sort: sort })
+      if ((f.path || "").replace(/^~/, Quickshell.env("HOME")) === norm) {
+        var patch = {}
+        patch[key] = value
+        f = Object.assign({}, f, patch)
+      }
       next.push(f)
     }
     root.pinnedFolders = next
     root.saveConfig()
+  }
+
+  function setFolderSort(path, sort) {
+    root.setFolderOption(path, "sort", sort)
     // Re-list an open stack of this folder in its new order.
     var open = String(root.activeStackFolder || "").replace(/^~/, Quickshell.env("HOME"))
-    if (open === norm) {
-      if (folderStackScanner.running) folderStackScanner.running = false
-      folderStackScanner.sortKey = sort
-      folderStackScanner.running = true
-    }
+    if (open !== "" && open === (path || "").replace(/^~/, Quickshell.env("HOME")))
+      root.showStackDir(root.activeStackPath, root.activeStackName)
+  }
+
+  function setFolderView(path, view) {
+    root.setFolderOption(path, "view", view === "grid" ? "grid" : "stack")
   }
 
   function isFolderPinned(path) {

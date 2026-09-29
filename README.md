@@ -154,7 +154,9 @@ $$\text{scale}(d) = 1 + (\text{peak} - 1) \cdot \frac{1 + \cos\left(\frac{\pi \c
 
 Pin directories like `~/Downloads`, `~/Projects`, or custom paths directly to your dock:
 
-- **Files popover** — up to 16 entries with icons, sizes, and relative times.
+- **Files popover** — up to 300 entries with icons, sizes, and relative times.
+- **View As** — right-click the folder: *Stack* (a list) or *Folder* (a grid of larger icons, with previews for images and for anything your file manager has already thumbnailed), saved per folder.
+- **Browse** — click a subfolder to step into it, **‹** to go back; long folders scroll.
 - **Sort By** — right-click the folder: Name, Kind, Date Modified, Date Added or Size, saved per folder.
 - **Direct opening** — click any file to open it in its default app (`xdg-open`), or jump to its folder.
 - **Drag out** — drag a file from the popover into a file manager, browser or chat app.
