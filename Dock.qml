@@ -759,6 +759,9 @@ Item {
   // App group tile look: "rounded" (softly rounded rim), "square" (rim
   // without rounding) or "none" (bare mini-icon grid).
   property string groupStyle: "rounded"
+  // Icons inside group tiles: "theme" follows iconStyle, "none" keeps them
+  // original.
+  property string groupIconEffects: "theme"
   property bool settingsPanelOpen: false
   property string settingsPanelPage: "appearance"
   property int themeVersion: 0
@@ -1834,6 +1837,7 @@ Item {
       : 1.5
     // Anything else, including the retired "theme" style, falls back to rounded.
     root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
+    root.groupIconEffects = (parsed && parsed.groupIconEffects === "none") ? "none" : "theme"
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
     root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
     if (parsed && typeof parsed.minimizeMode === "string") {
@@ -2891,6 +2895,7 @@ Item {
     conf.showBorder = root.showBorder
     conf.borderWidth = root.borderWidth
     conf.groupStyle = root.groupStyle
+    conf.groupIconEffects = root.groupIconEffects
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
     conf.minimizeMode = root.minimizeMode

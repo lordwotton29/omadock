@@ -1068,6 +1068,16 @@ PanelWindow {
               value: root ? root.groupStyle : "rounded"
               onPicked: function(v) { root.setOption("groupStyle", v) }
             }
+            ChoiceRow {
+              label: "Icon style"
+              hint: "Theme applies the style from Effects to the icons inside groups."
+              options: [
+                { value: "theme", label: "Theme" },
+                { value: "none", label: "None" }
+              ]
+              value: root ? root.groupIconEffects : "theme"
+              onPicked: function(v) { root.setOption("groupIconEffects", v) }
+            }
 
             SectionLabel { text: "Groups" }
 
