@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Services.Mpris
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
@@ -63,6 +64,17 @@ Item {
   }
 
   readonly property var dockScreen: root.pickScreen()
+
+  // The output's own scale (Hyprland's monitor scale, e.g. 1.5). Qt renders
+  // fractional scales at the next whole ratio (2) and the compositor scales
+  // the buffer down, so pixel-exact drawing has to target this grid, not
+  // Screen.devicePixelRatio. HyprlandMonitor.scale reads 0 until the monitor
+  // list has been fetched, hence the refresh (Component.onCompleted) and the
+  // fallback.
+  readonly property real outputScale: {
+    var m = root.dockScreen ? Hyprland.monitorFor(root.dockScreen) : null
+    return (m && m.scale > 0) ? m.scale : 1
+  }
 
   // ------------------------------------------------- multi-monitor
   // Set by DockHost when one dock runs per monitor. forcedScreenName pins this
@@ -313,7 +325,11 @@ Item {
 
   // Build the index once at load, but only when the host withheld its own
   // library — with a host library present the index would be dead weight.
-  Component.onCompleted: if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
+  Component.onCompleted: {
+    if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
+    // Fills HyprlandMonitor.scale for outputScale.
+    Hyprland.refreshMonitors()
+  }
 
   // ------------------------------------------------- magnification
 
@@ -339,6 +355,20 @@ Item {
   readonly property real zoomPeak: 1.22
   readonly property real magnifyRange: root.iconSlot * 2.2
   readonly property real baseIconArt: root.iconSize - Style.space(4)
+  // Largest size an icon reaches under either hover effect; icons decode at
+  // this size once instead of on every animation frame.
+  readonly property real maxIconArt: Math.ceil(root.baseIconArt * Math.max(root.zoomPeak, root.magnifyPeak))
+
+  // Shared slot geometry. Every item (apps, groups, folders, drives, the
+  // Omarchy button) draws its artwork in the same baseIconArt box, centred in
+  // the part of the slot above a fixed indicator band. The box never moves with
+  // running state, so icons stay level whether or not they carry dots.
+  readonly property real indicatorBand: Style.space(6)
+  // Distance from the slot's bottom edge to the bottom of the artwork.
+  readonly property real iconArtBottom: Math.round(root.indicatorBand + (root.iconSlot - root.indicatorBand - root.baseIconArt) / 2)
+  // Vertical offset of the artwork's centre from the slot's centre, for
+  // things centred on the row (separators, preview tiles).
+  readonly property real iconCenterOffset: -root.indicatorBand / 2
 
   // The card's own handler in dockCard-local coordinates.
   readonly property real pointerX: cardHover.hovered
@@ -667,6 +697,13 @@ Item {
   property var pinnedFolders: []
   property string activeStackFolder: ""
   property string activeStackName: ""
+  // Directory the open stack is showing: the pinned folder, or one of its
+  // subfolders after clicking into it. activeStackTrail holds the folders
+  // walked through ({ path, name }), so Back can return step by step.
+  property string activeStackPath: ""
+  property var activeStackTrail: []
+  // "stack" (list) or "grid" (larger icons and previews), per pinned folder.
+  readonly property string activeStackView: root.activeStackFolder !== "" ? root.folderViewFor(root.activeStackFolder) : "stack"
   property var activeStackEntries: []
   property int activeStackTotalCount: 0
   property real activeStackX: 0
@@ -717,8 +754,176 @@ Item {
   property string dockShape: "rounded"
   property string dockBgColor: "theme"
   property bool showBackground: true
+  // Background fill: "solid" (dockBgColor) or "gradient" (below).
+  property string bgFill: "solid"
+  // Gradient palette: "theme" (built from the Omarchy theme's colours) or
+  // one of gradientPresets. gradientStrength: how strongly the colours cover
+  // the base background, 0..1.
+  property string gradientPreset: "theme"
+  property real gradientStrength: 0.6
+  readonly property var gradientPresets: [
+    { id: "aurora", name: "Aurora", colors: ["#5dffb0", "#7fc4ff", "#c99cff"] },
+    { id: "sunset", name: "Sunset", colors: ["#ff7a59", "#ff4f8b", "#ffc15e"] },
+    { id: "ocean", name: "Ocean", colors: ["#1e90ff", "#00c2c7", "#6a5cff"] },
+    { id: "forest", name: "Forest", colors: ["#2e8b57", "#a3c95a", "#1f6f5c"] },
+    { id: "rose", name: "Rose", colors: ["#ff9ac1", "#c86bfa", "#ffd1dc"] },
+    { id: "lavender", name: "Lavender", colors: ["#b8a1ff", "#7aa2ff", "#f0b3ff"] },
+    { id: "ember", name: "Ember", colors: ["#ff5e3a", "#ff9f1c", "#8b1e3f"] },
+    { id: "citrus", name: "Citrus", colors: ["#ffd43b", "#94d82d", "#ff922b"] },
+    { id: "mono", name: "Mono", colors: ["#9aa0a6", "#5f6368", "#d0d4d8"] }
+  ]
+
+  // Three colours from the current theme: its accent, then the two named
+  // palette colours (colors.toml) that sit furthest enough in hue from the
+  // accent and from each other, so the gradient never collapses into one
+  // hue. Falls back to the accent alone when the theme names no colours.
+  readonly property var themeGradientColors: {
+    var _tv = root.themeVersion
+    var text = ""
+    try { text = DockModel.readCapped(themeColorsFile.text(), DockModel.MAX_COLORS_TOML_BYTES) } catch (e) {}
+    var named = {}
+    var re = /^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6})"/gm
+    var m
+    while ((m = re.exec(text)) !== null) named[m[1]] = m[2]
+    var accent = named.accent || String(Color.accent)
+    var picked = [accent]
+    var order = ["magenta", "blue", "cyan", "red", "green", "orange", "yellow"]
+    function hueGap(a, b) {
+      var ha = Qt.color(a).hslHue, hb = Qt.color(b).hslHue
+      if (ha < 0 || hb < 0) return 1
+      var d = Math.abs(ha - hb)
+      return Math.min(d, 1 - d)
+    }
+    for (var i = 0; i < order.length && picked.length < 3; i++) {
+      var c = named[order[i]]
+      if (!c) continue
+      var ok = true
+      for (var j = 0; j < picked.length; j++) if (hueGap(c, picked[j]) < 0.07) ok = false
+      if (ok) picked.push(c)
+    }
+    while (picked.length < 3) picked.push(accent)
+    return picked
+  }
+
+  readonly property var gradientColors: {
+    if (root.gradientPreset !== "theme") {
+      for (var i = 0; i < root.gradientPresets.length; i++)
+        if (root.gradientPresets[i].id === root.gradientPreset) return root.gradientPresets[i].colors
+    }
+    return root.themeGradientColors
+  }
+
+  // Static film grain over the background card, 0 (off) .. 1.
+  property real grain: 0
   property bool showShadow: true
+  // Shadow opacity, 0..1.
+  property real shadowStrength: 0.4
+  // Compositor blur behind the dock: "system" leaves it to the user's own
+  // Hyprland layer rules; "on"/"off" add a runtime rule that overrides them.
+  property string blurMode: "system"
+  // Icon style: "original", "mono", "pixel" or "dots" (see DockIconArt).
+  property string iconStyle: "original"
+  // Colour for the mono and dots styles: the dock's text colour, the accent,
+  // or "bw": near black or near white, whichever contrasts more with the
+  // background behind the icons.
+  property string iconTint: "text"
+  // Cells across an icon for the pixel and dots styles.
+  property int iconGrid: 16
+  // mono / dots: adaptive contrast (0..1) and effect strength over the
+  // original icon (0..1).
+  property real iconContrast: 0
+  property real iconStrength: 1
+  // With an icon style on: show the hovered icon as shipped.
+  property bool iconHoverOriginal: false
+  // The mono / dots ink, kept readable against what sits behind the icons
+  // (see readableOn): an accent tint over a theme gradient built from that
+  // same accent would otherwise vanish into it.
+  readonly property color iconTintColor: root.tintFor(root.iconTint, root.dockForeground, root.iconBackdropColor)
+
+  // Tint for an iconTint mode ("text", "accent", "bw") over a backdrop.
+  function tintFor(mode, textColor, backdrop) {
+    if (mode === "bw") return root.blackOrWhiteOn(backdrop)
+    return root.readableOn(mode === "accent" ? Color.accent : textColor, backdrop)
+  }
+
+  // Near black or near white, whichever contrasts more with the backdrop.
+  function blackOrWhiteOn(backdrop) {
+    var dark = Qt.color("#141414")
+    var light = Qt.color("#f2f2f2")
+    return root.contrastRatio(dark, backdrop) >= root.contrastRatio(light, backdrop) ? dark : light
+  }
+
+  // Best guess at the colour behind the icons: the card's fill (for a
+  // gradient, its colours averaged and mixed into the base by the strength
+  // they cover it with), or the theme background when the card is off.
+  readonly property color iconBackdropColor: {
+    var base = Color.bar.background
+    if (!root.showBackground) return Color.background
+    if (root.bgFill === "gradient") {
+      var cols = root.gradientColors || []
+      if (cols.length === 0) return base
+      var r = 0, g = 0, b = 0
+      for (var i = 0; i < cols.length; i++) {
+        var c = Qt.color(cols[i])
+        r += c.r; g += c.g; b += c.b
+      }
+      r /= cols.length; g /= cols.length; b /= cols.length
+      var k = Math.min(1, root.gradientStrength * 0.75)
+      return Qt.rgba(base.r + (r - base.r) * k, base.g + (g - base.g) * k, base.b + (b - base.b) * k, 1)
+    }
+    var custom = String(root.dockBgColor || "")
+    return custom.charAt(0) === "#" ? Qt.color(custom) : base
+  }
+
+  // WCAG relative luminance and contrast ratio.
+  function luminance(c) {
+    function lin(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+    return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+  }
+  function contrastRatio(a, b) {
+    var la = root.luminance(a), lb = root.luminance(b)
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+  }
+
+  // A colour with the given hue and saturation, moved in lightness away
+  // from the backdrop (darker on a light one, lighter on a dark one) until
+  // it reaches a 3:1 contrast ratio, the WCAG minimum for graphics.
+  function readableOn(color, backdrop) {
+    var c = Qt.color(color)
+    var bg = Qt.color(backdrop)
+    if (root.contrastRatio(c, bg) >= 3) return c
+    var darker = root.luminance(bg) > 0.18
+    var h = c.hslHue < 0 ? 0 : c.hslHue
+    var sat = c.hslSaturation
+    var best = c
+    for (var step = 1; step <= 20; step++) {
+      var l = darker ? Math.max(0, c.hslLightness - step * 0.05) : Math.min(1, c.hslLightness + step * 0.05)
+      best = Qt.hsla(h, sat, l, c.a)
+      if (root.contrastRatio(best, bg) >= 3) break
+    }
+    return best
+  }
+  // Without a card to cast one, each icon casts its own shadow.
+  readonly property bool iconShadow: root.showShadow && !root.showBackground && root.shadowStrength > 0
   property bool showBorder: true
+  // Running/open marks under items: "theme" follows the dock shape,
+  // "rounded" dots and pills, "square" square dots and bars.
+  property string indicatorShape: "theme"
+  readonly property bool indicatorSquare: {
+    if (root.indicatorShape === "square") return true
+    if (root.indicatorShape === "rounded") return false
+    if (root.dockShape === "square") return true
+    if (root.dockShape === "theme" || root.dockShape === "auto") return !(Style.cornerRadius > 0)
+    return false
+  }
+  // Rim width in logical pixels, 1..6.
+  property real borderWidth: 1.5
+  // App group tile look: "rounded" (softly rounded rim), "square" (rim
+  // without rounding) or "none" (bare mini-icon grid).
+  property string groupStyle: "rounded"
+  // Icons in an opened group (AppGroupPopup): "theme" follows iconStyle,
+  // "none" keeps them original. The tile on the dock always follows it.
+  property string groupIconEffects: "theme"
   property bool settingsPanelOpen: false
   property string settingsPanelPage: "appearance"
   property int themeVersion: 0
@@ -735,7 +940,6 @@ Item {
   property var _lastProcessedNotifTimestamp: 0
   property int revealDelay: 160
   property int tooltipDelay: 450
-  property string settingsSubmenu: ""
 
   // ------------------------------------------------- autohide state
 
@@ -879,7 +1083,9 @@ Item {
   Process {
     id: folderStackScanner
     property string targetFolder: ""
-    command: ["python3", "-c", "import os, json, time, sys\nfolder = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 else ''\nif not folder or not os.path.exists(folder):\n    print(json.dumps({'count':0,'items':[],'folder':folder}))\n    sys.exit(0)\nentries = []\ntry:\n    for entry in os.scandir(folder):\n        try:\n            if entry.name.startswith('.'):\n                continue\n            stat = entry.stat()\n            is_dir = entry.is_dir()\n            size_bytes = stat.st_size if not is_dir else 0\n            if size_bytes < 1024:\n                size_str = f'{size_bytes} B'\n            elif size_bytes < 1024 * 1024:\n                size_str = f'{size_bytes / 1024:.1f} KB'\n            elif size_bytes < 1024 * 1024 * 1024:\n                size_str = f'{size_bytes / (1024 * 1024):.1f} MB'\n            else:\n                size_str = f'{size_bytes / (1024 * 1024 * 1024):.1f} GB'\n            diff = time.time() - stat.st_mtime\n            if diff < 60:\n                time_str = 'Just now'\n            elif diff < 3600:\n                time_str = f'{int(diff // 60)}m ago'\n            elif diff < 86400:\n                time_str = f'{int(diff // 3600)}h ago'\n            else:\n                time_str = f'{int(diff // 86400)}d ago'\n            ext = os.path.splitext(entry.name)[1].lower()\n            is_img = ext in ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif']\n            if is_dir:\n                icon = 'folder'\n            elif is_img:\n                icon = 'image-x-generic'\n            elif ext in ['.mp4', '.mkv', '.webm', '.mov', '.avi']:\n                icon = 'video-x-generic'\n            elif ext in ['.mp3', '.flac', '.wav', '.ogg', '.m4a']:\n                icon = 'audio-x-generic'\n            elif ext in ['.zip', '.tar', '.gz', '.xz', '.7z', '.rar']:\n                icon = 'package-x-generic'\n            elif ext in ['.pdf']:\n                icon = 'application-pdf'\n            elif ext in ['.txt', '.md', '.json', '.qml', '.py', '.cpp', '.js', '.lua', '.rs', '.go', '.html', '.css']:\n                icon = 'text-x-generic'\n            else:\n                icon = 'application-x-executable'\n            entries.append({'name': entry.name, 'path': entry.path, 'isDir': is_dir, 'isImage': is_img, 'size': size_str, 'time': time_str, 'mtime': stat.st_mtime, 'icon': icon})\n        except Exception:\n            pass\nexcept Exception:\n    pass\nentries.sort(key=lambda x: x['mtime'], reverse=True)\nprint(json.dumps({'count': len(entries), 'items': entries[:16], 'folder': folder}))\n", folderStackScanner.targetFolder]
+    property string sortKey: "modified"
+    // scripts/list-folder.py lists, sorts and caps the folder (see its header).
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey, "300"]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
@@ -889,7 +1095,7 @@ Item {
           // folder the user currently has open (or any at all). Prevents a
           // slow older scan from painting one folder's files under another's
           // header, or repopulating after the stack was closed.
-          var wanted = String(root.activeStackFolder || "").replace(/^~/, Quickshell.env("HOME"))
+          var wanted = String(root.activeStackPath || "")
           if (parsed.folder !== wanted) return
           root.activeStackTotalCount = parsed.count || 0
           root.activeStackEntries = parsed.items || []
@@ -903,7 +1109,10 @@ Item {
 
   Process {
     id: customFolderPickerProc
-    command: ["python3", "-c", "import sys, subprocess, shutil\ntry:\n    import gi\n    gi.require_version('Gtk', '3.0')\n    from gi.repository import Gtk\n    dialog = Gtk.FileChooserDialog(title='Select Folder to Pin to Dock', action=Gtk.FileChooserAction.SELECT_FOLDER)\n    dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)\n    res = dialog.run()\n    if res == Gtk.ResponseType.OK:\n        print(dialog.get_filename())\n    dialog.destroy()\nexcept Exception:\n    if shutil.which('zenity'):\n        res = subprocess.run(['zenity', '--file-selection', '--directory', '--title=Select Folder to Pin to Dock'], capture_output=True, text=True)\n        if res.returncode == 0 and res.stdout.strip():\n            print(res.stdout.strip())\n    elif shutil.which('kdialog'):\n        res = subprocess.run(['kdialog', '--getexistingdirectory', '--title', 'Select Folder to Pin to Dock'], capture_output=True, text=True)\n        if res.returncode == 0 and res.stdout.strip():\n            print(res.stdout.strip())\n"]
+    // Goes through the XDG FileChooser portal, so the picker is whatever the
+    // desktop routes FileChooser to (the default file manager when it ships a
+    // portal backend); a GTK dialog, zenity or kdialog are fallbacks.
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/pick-folder.py").toString().replace(/^file:\/\//, ""))]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
@@ -966,6 +1175,18 @@ Item {
         root.scanRemovableDrives()
       }
     }
+  }
+
+  // A chooser closed by the compositor rather than through its own Cancel may
+  // never answer the portal, which would leave the picker process waiting and
+  // swallow every later click. Asking again restarts it instead.
+  function pickCustomFolder() {
+    if (customFolderPickerProc.running) {
+      customFolderPickerProc.running = false
+      Qt.callLater(function() { customFolderPickerProc.running = true })
+      return
+    }
+    customFolderPickerProc.running = true
   }
 
   function scanRemovableDrives() {
@@ -1271,7 +1492,7 @@ Item {
       return
     }
 
-    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen
+    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen || root.externalDragOver || root.appDropTargetId !== ""
 
     // Hovered, Context Menu Open, or Dragging: keep visible
     if (isHovered) {
@@ -1301,6 +1522,10 @@ Item {
   onActiveAppGroupIdChanged: root.syncVisibility()
   onDragAppIdChanged: root.syncVisibility()
   onSettingsPanelOpenChanged: root.syncVisibility()
+  onExternalDragOverChanged: {
+    if (!root.externalDragOver) root.dropPinArmed = false
+    root.syncVisibility()
+  }
   onAutohideChanged: root.syncVisibility()
   onIntelligentAutohideChanged: {
     if (root.intelligentAutohide) debounceOverlapTimer.restart()
@@ -1492,6 +1717,11 @@ Item {
     }
     function onRawEvent(event) {
       var n = String((event && event.name) || "")
+      // A config reload drops runtime layer rules along with the Lua state.
+      if (n === "configreloaded") {
+        root.applyBlurRule(true)
+        return
+      }
       if (n === "openwindow") {
         var rawAddr = String(event.data || "").split(",")[0].trim()
         if (rawAddr.slice(0, 2) === "0x" || rawAddr.slice(0, 2) === "0X") rawAddr = rawAddr.slice(2)
@@ -1759,8 +1989,34 @@ Item {
     root.dockShape = parsed && typeof parsed.shape === "string" ? parsed.shape : "rounded"
     root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
     root.showBackground = parsed ? parsed.showBackground !== false : true
+    root.bgFill = (parsed && parsed.bgFill === "gradient") ? "gradient" : "solid"
+    root.gradientPreset = parsed && typeof parsed.gradientPreset === "string" ? parsed.gradientPreset : "theme"
+    root.gradientStrength = parsed && typeof parsed.gradientStrength === "number" ? Math.max(0, Math.min(1, parsed.gradientStrength)) : 0.6
+    root.grain = parsed && typeof parsed.grain === "number" ? Math.max(0, Math.min(1, parsed.grain)) : 0
     root.showShadow = parsed ? parsed.showShadow !== false : true
+    root.shadowStrength = parsed && typeof parsed.shadowStrength === "number"
+      ? Math.max(0, Math.min(1, parsed.shadowStrength))
+      : 0.4
+    root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
+    root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
+    root.iconTint = (parsed && (parsed.iconTint === "accent" || parsed.iconTint === "bw")) ? parsed.iconTint : "text"
+    root.iconHoverOriginal = parsed ? parsed.iconHoverOriginal === true : false
+    root.iconContrast = parsed && typeof parsed.iconContrast === "number" ? Math.max(0, Math.min(1, parsed.iconContrast)) : 0
+    root.iconStrength = parsed && typeof parsed.iconStrength === "number" ? Math.max(0, Math.min(1, parsed.iconStrength)) : 1
+    root.iconGrid = parsed && typeof parsed.iconGrid === "number"
+      ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
+      : 16
+    root.blurSize = parsed && typeof parsed.blurSize === "number" ? Math.max(0, Math.min(20, Math.round(parsed.blurSize))) : 0
+    root.systemBlurSize = parsed && typeof parsed.systemBlurSize === "number" ? Math.max(0, Math.round(parsed.systemBlurSize)) : 0
+    root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
+    root.indicatorShape = (parsed && (parsed.indicatorShape === "rounded" || parsed.indicatorShape === "square")) ? parsed.indicatorShape : "theme"
+    root.borderWidth = parsed && typeof parsed.borderWidth === "number"
+      ? Math.max(1, Math.min(6, parsed.borderWidth))
+      : 1.5
+    // Anything else, including the retired "theme" style, falls back to rounded.
+    root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
+    root.groupIconEffects = (parsed && parsed.groupIconEffects === "none") ? "none" : "theme"
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
     root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
     if (parsed && typeof parsed.minimizeMode === "string") {
@@ -1838,8 +2094,264 @@ Item {
     root.contextPinned = false
     root.contextX = x
     root.contextY = y
-    root.settingsSubmenu = ""
     root.contextAppId = "__dock_settings__"
+  }
+
+  // ------------------------------------------------- compositor blur
+  // Hyprland blurs layers through layer rules, which can switch blur on or
+  // off per layer but not size it: blur size is one global setting
+  // (decoration.blur.size). So "on" can also carry a size, applied globally,
+  // and the size Hyprland had before (systemBlurSize) is put back when the
+  // dock stops overriding it. The rule lives in a Lua global so a later change
+  // (or "system") can disable it again without reloading the user's config.
+  // One dock applies it: every dock shares the "omadock" namespace.
+  // "" until the first apply, so a rule left behind by an earlier shell
+  // session (the Lua state outlives the shell) is always reconciled.
+  property string _appliedBlurMode: ""
+
+  function applyBlurRule(force) {
+    if (!root.isPrimary) return
+    if (force || root.blurMode !== root._appliedBlurMode) {
+      var lua = "if _G.omadock_blur_rule then _G.omadock_blur_rule:set_enabled(false) end"
+      if (root.blurMode !== "system") {
+        lua += " _G.omadock_blur_rule = hl.layer_rule({ match = { namespace = \"^omadock$\" }, blur = "
+          + (root.blurMode === "on" ? "true" : "false") + ", ignore_alpha = 0.05 })"
+      }
+      Quickshell.execDetached(["hyprctl", "eval", lua])
+      root._appliedBlurMode = root.blurMode
+    }
+    // The size can change while the mode stays the same.
+    root.applyBlurSize(force)
+  }
+
+  // Global blur size the dock asks for while blur is "on"; 0 leaves it alone.
+  property int blurSize: 0
+  // Hyprland's own blur size, captured before the first override so it can be
+  // restored; persisted, since the override outlives a shell restart.
+  property int systemBlurSize: 0
+  property int _appliedBlurSize: 0
+
+  function setHyprBlurSize(size) {
+    Quickshell.execDetached(["hyprctl", "eval",
+      "hl.config({ decoration = { blur = { size = " + Math.round(size) + " } } })"])
+  }
+
+  function applyBlurSize(force) {
+    if (!root.isPrimary) return
+    var want = (root.blurMode === "on" && root.blurSize > 0) ? root.blurSize : 0
+    if (!force && want === root._appliedBlurSize) return
+    if (want > 0) root.setHyprBlurSize(want)
+    else if (root._appliedBlurSize > 0 && root.systemBlurSize > 0) root.setHyprBlurSize(root.systemBlurSize)
+    root._appliedBlurSize = want
+  }
+
+  // currentSize: Hyprland's blur size right now, read by the settings panel;
+  // remembered as the system size the first time the dock overrides it.
+  function setBlurSize(size, currentSize) {
+    if (root.systemBlurSize <= 0 && root._appliedBlurSize <= 0 && currentSize > 0)
+      root.systemBlurSize = currentSize
+    root.blurSize = Math.max(1, Math.min(20, Math.round(size)))
+    root.applyBlurSize(false)
+    root.saveConfig()
+  }
+
+  // ------------------------------------------------- drops from outside
+  // Folders dragged in from a file manager are pinned as stacks. Hover
+  // handlers do not fire during a drag, so the drop areas report it here to
+  // keep (or bring) the dock in view.
+  property bool externalDragOver: false
+  // While a folder is dragged over the dock: its path once confirmed to be a
+  // directory (dropCandidatePath), and where among the pinned folders it
+  // would land (0..count). Opening a dragged item with an app comes first
+  // (see beginAppDrop): pinning only arms once the pointer has rested in the
+  // folder section (DockCard's pinDwell), and only then does the folder row
+  // open a gap there, the way the macOS dock does.
+  property string dropCandidatePath: ""
+  property bool dropPinArmed: false
+  readonly property string dropPreviewPath: (root.dropPinArmed && root.externalDragOver) ? root.dropCandidatePath : ""
+  property int dropInsertIndex: -1
+
+  // Called on drag enter: finds the first directory among the dragged URLs.
+  function previewDraggedFolder(urls) {
+    root.dropCandidatePath = ""
+    root.dropPinArmed = false
+    var paths = root.localPathsFromUrls(urls)
+    if (paths.length === 0) return
+    if (dropFolderProbe.running) dropFolderProbe.running = false
+    dropFolderProbe.command = ["sh", "-c", 'for p; do [ -d "$p" ] && { printf "%s\\n" "$p"; exit 0; }; done', "sh"].concat(paths)
+    dropFolderProbe.running = true
+  }
+
+  Process {
+    id: dropFolderProbe
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (root.externalDragOver && line) root.dropCandidatePath = String(line)
+      }
+    }
+  }
+
+  function insertFolderPin(path, name, icon, index) {
+    if (root.isFolderPinned(path)) return
+    var next = (root.pinnedFolders || []).slice()
+    var at = (index >= 0 && index <= next.length) ? index : next.length
+    next.splice(at, 0, { path: path, name: name || "Folder", icon: icon || DockModel.folderIconFor(path, "") })
+    root.pinnedFolders = next
+    root.saveConfig()
+  }
+
+  function localPathsFromUrls(urls) {
+    var out = []
+    for (var i = 0; i < (urls ? urls.length : 0); i++) {
+      var u = String(urls[i])
+      if (u.indexOf("file://") !== 0) continue
+      var p = decodeURIComponent(u.slice(7))
+      if (p.charAt(0) === "/") out.push(p)
+    }
+    return out
+  }
+
+  function pinDroppedFolders(urls) {
+    var paths = root.localPathsFromUrls(urls)
+    dropFolderCheck.insertAt = root.dropInsertIndex
+    root.dropPinArmed = false
+    root.dropCandidatePath = ""
+    root.dropInsertIndex = -1
+    if (paths.length === 0) return
+    // Only directories are pinned; the check runs out of process.
+    dropFolderCheck.command = ["sh", "-c", 'for p; do [ -d "$p" ] && printf "%s\\n" "$p"; done', "sh"].concat(paths)
+    dropFolderCheck.running = true
+  }
+
+  Process {
+    id: dropFolderCheck
+    // Where the next confirmed folder goes; -1 appends. Advances per folder
+    // so several dropped at once keep their order.
+    property int insertAt: -1
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        var chosen = String(line || "").replace(/\/+$/, "")
+        if (chosen === "" || root.isFolderPinned(chosen)) return
+        var home = Quickshell.env("HOME")
+        var relPath = (chosen === home || chosen.indexOf(home + "/") === 0) ? "~" + chosen.slice(home.length) : chosen
+        root.insertFolderPin(relPath, chosen.split("/").pop() || "Folder", DockModel.folderIconFor(relPath, ""), dropFolderCheck.insertAt)
+        if (dropFolderCheck.insertAt >= 0) dropFolderCheck.insertAt++
+      }
+    }
+  }
+
+  // ------------------------------------------------- media controls
+  // The MPRIS player an app exposes, matched on the player's DesktopEntry
+  // (or, failing that, its Identity) against the dock app id. Proxies such as
+  // playerctld name no app, so they never match. A playing instance wins
+  // when an app exposes several (e.g. browser tabs).
+  function mediaPlayerFor(appId) {
+    if (!appId || appId.indexOf("__") === 0) return null
+    var list = (Mpris.players && Mpris.players.values) ? Mpris.players.values : []
+    var fallback = null
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i]
+      if (!p) continue
+      var entry = String(p.desktopEntry || "").replace(/\.desktop$/, "")
+      var ident = String(p.identity || "")
+      var matches = (entry !== "" && DockModel.isAppMatch(appId, entry))
+        || (entry === "" && ident !== "" && DockModel.isAppMatch(appId, ident))
+      if (!matches) continue
+      if (p.isPlaying) return p
+      if (!fallback) fallback = p
+    }
+    return fallback
+  }
+
+  // Player for the app whose context menu is open, if any.
+  readonly property var contextPlayer: root.mediaPlayerFor(root.contextAppId)
+
+  // ------------------------------------------------- files dropped on apps
+  // Dragging files onto an app icon opens them with that app, as the macOS
+  // dock does, when its desktop entry declares every dropped file's MIME type
+  // (scripts/drop-check.py). The check runs once per icon entered; files let
+  // go before it answers open as soon as it says yes.
+  property string appDropTargetId: ""
+  property string appDropState: ""    // "", "pending", "yes", "no"
+  property var appDropPaths: []
+  property string _appDropOpenId: ""  // dropped while pending: open on "yes"
+  onAppDropTargetIdChanged: root.syncVisibility()
+
+  // The desktop entry id an app launches through (same lookup as launchApp).
+  function desktopIdFor(appId) {
+    var deskEntry = DockModel.entryFor(root.appRows, appId)
+    if (!deskEntry && typeof DesktopEntries !== "undefined" && DesktopEntries)
+      deskEntry = DesktopEntries.heuristicLookup(appId) || DesktopEntries.byId(appId)
+    return (deskEntry && deskEntry.id) ? deskEntry.id : appId
+  }
+
+  function beginAppDrop(appId, urls) {
+    root.appDropTargetId = appId
+    root._appDropOpenId = ""
+    root.appDropPaths = root.localPathsFromUrls(urls)
+    if (root.appDropPaths.length === 0) {
+      root.appDropState = "no"
+      return
+    }
+    root.appDropState = "pending"
+    if (appDropCheck.running) appDropCheck.running = false
+    appDropCheck.command = ["python3",
+      decodeURIComponent(Qt.resolvedUrl("scripts/drop-check.py").toString().replace(/^file:\/\//, "")),
+      root.desktopIdFor(appId)].concat(root.appDropPaths)
+    appDropCheck.running = true
+  }
+
+  function endAppDrop(appId) {
+    if (root.appDropTargetId !== appId) return
+    root.appDropTargetId = ""
+    // A drop still waiting on the check keeps its state until it answers.
+    if (root._appDropOpenId === "") root.appDropState = ""
+  }
+
+  // Returns false when the app cannot take the files (the drop is refused).
+  function dropOnApp(appId) {
+    root.appDropTargetId = ""
+    if (root.appDropState === "yes") {
+      root.openFilesWith(appId, root.appDropPaths)
+      root.appDropState = ""
+      return true
+    }
+    if (root.appDropState === "pending") {
+      root._appDropOpenId = appId
+      return true
+    }
+    root.appDropState = ""
+    return false
+  }
+
+  function openFilesWith(appId, paths) {
+    if (!paths || paths.length === 0) return
+    Quickshell.execDetached(["uwsm-app", "--", "gtk-launch", "--", root.desktopIdFor(appId) + ".desktop"].concat(paths))
+  }
+
+  Process {
+    id: appDropCheck
+    running: false
+    stdout: SplitParser {
+      onRead: function(line) {
+        var ok = String(line).trim() === "yes"
+        if (root._appDropOpenId !== "") {
+          if (ok) root.openFilesWith(root._appDropOpenId, root.appDropPaths)
+          root._appDropOpenId = ""
+          root.appDropState = ""
+          return
+        }
+        if (root.appDropTargetId !== "") root.appDropState = ok ? "yes" : "no"
+      }
+    }
+  }
+
+  function setBlurMode(mode) {
+    root.blurMode = mode
+    root.applyBlurRule(false)
+    root.saveConfig()
   }
 
   function openSettingsPanel() {
@@ -2702,8 +3214,27 @@ Item {
     conf.shape = root.dockShape
     conf.bgColor = root.dockBgColor
     conf.showBackground = root.showBackground
+    conf.bgFill = root.bgFill
+    conf.gradientPreset = root.gradientPreset
+    conf.gradientStrength = root.gradientStrength
+    conf.grain = root.grain
     conf.showShadow = root.showShadow
+    conf.shadowStrength = root.shadowStrength
+    conf.blur = root.blurMode
+    if (root.blurSize > 0) conf.blurSize = root.blurSize
+    else delete conf.blurSize
+    if (root.systemBlurSize > 0) conf.systemBlurSize = root.systemBlurSize
+    conf.iconStyle = root.iconStyle
+    conf.iconTint = root.iconTint
+    conf.iconHoverOriginal = root.iconHoverOriginal
+    conf.iconContrast = root.iconContrast
+    conf.iconStrength = root.iconStrength
+    conf.iconGrid = root.iconGrid
     conf.showBorder = root.showBorder
+    conf.indicatorShape = root.indicatorShape
+    conf.borderWidth = root.borderWidth
+    conf.groupStyle = root.groupStyle
+    conf.groupIconEffects = root.groupIconEffects
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
     conf.minimizeMode = root.minimizeMode
@@ -3042,18 +3573,48 @@ Item {
     // older scan race the new one.
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = path
-    root.activeStackName = name || "Folder"
     root.activeStackX = cx
-    root.activeStackEntries = []
-    folderStackScanner.targetFolder = (path || "").replace(/^~/, Quickshell.env("HOME"))
-    folderStackScanner.running = true
+    root.activeStackTrail = []
+    root.showStackDir((path || "").replace(/^~/, Quickshell.env("HOME")), name || "Folder")
     root.syncVisibility()
+  }
+
+  // Lists dir in the open stack. Kill any in-flight scan first: assigning
+  // running = true while a process is already running is a no-op in
+  // Quickshell, which used to let a slow older scan race the new one.
+  function showStackDir(dir, name) {
+    if (folderStackScanner.running) folderStackScanner.running = false
+    root.activeStackPath = dir
+    root.activeStackName = name
+    root.activeStackEntries = []
+    root.activeStackTotalCount = 0
+    folderStackScanner.targetFolder = dir
+    folderStackScanner.sortKey = root.folderSortFor(root.activeStackFolder)
+    folderStackScanner.running = true
+  }
+
+  // Step into a subfolder of the open stack.
+  function enterStackDir(dir, name) {
+    var trail = root.activeStackTrail.slice()
+    trail.push({ path: root.activeStackPath, name: root.activeStackName })
+    root.activeStackTrail = trail
+    root.showStackDir(dir, name || dir.split("/").pop() || "Folder")
+  }
+
+  function stackBack() {
+    var trail = root.activeStackTrail.slice()
+    if (trail.length === 0) return
+    var prev = trail.pop()
+    root.activeStackTrail = trail
+    root.showStackDir(prev.path, prev.name)
   }
 
   function closeFolderStack() {
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = ""
     root.activeStackName = ""
+    root.activeStackPath = ""
+    root.activeStackTrail = []
     root.activeStackEntries = []
     root.syncVisibility()
   }
@@ -3066,6 +3627,65 @@ Item {
     root.contextY = cy
     root.contextAppId = "__folder_context__"
     root.syncVisibility()
+  }
+
+  // Per-folder stack order, stored on the pinned entry (see list-folder.py).
+  readonly property var folderSortLabels: ({
+    name: "Name",
+    kind: "Kind",
+    modified: "Date Modified",
+    added: "Date Added",
+    size: "Size"
+  })
+
+  function folderSortFor(path) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
+        return list[i].sort || "modified"
+    }
+    return "modified"
+  }
+
+  function folderViewFor(path) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].path || "").replace(/^~/, Quickshell.env("HOME")) === norm)
+        return list[i].view === "grid" ? "grid" : "stack"
+    }
+    return "stack"
+  }
+
+  // Sets one field (sort, view) on a pinned folder's entry and saves.
+  function setFolderOption(path, key, value) {
+    var norm = (path || "").replace(/^~/, Quickshell.env("HOME"))
+    var next = []
+    var list = root.pinnedFolders || []
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i]
+      if ((f.path || "").replace(/^~/, Quickshell.env("HOME")) === norm) {
+        var patch = {}
+        patch[key] = value
+        f = Object.assign({}, f, patch)
+      }
+      next.push(f)
+    }
+    root.pinnedFolders = next
+    root.saveConfig()
+  }
+
+  function setFolderSort(path, sort) {
+    root.setFolderOption(path, "sort", sort)
+    // Re-list an open stack of this folder in its new order.
+    var open = String(root.activeStackFolder || "").replace(/^~/, Quickshell.env("HOME"))
+    if (open !== "" && open === (path || "").replace(/^~/, Quickshell.env("HOME")))
+      root.showStackDir(root.activeStackPath, root.activeStackName)
+  }
+
+  function setFolderView(path, view) {
+    root.setFolderOption(path, "view", view === "grid" ? "grid" : "stack")
   }
 
   function isFolderPinned(path) {
@@ -3202,6 +3822,14 @@ Item {
       HoverHandler {
         id: revealHover
         onHoveredChanged: root.syncVisibility()
+      }
+
+      // A drag reaching the edge reveals a hidden dock, like hovering does.
+      DropArea {
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onEntered: root.externalDragOver = true
+        onExited: if (!dockCardComp.folderDropActive) root.externalDragOver = false
       }
 
       Rectangle {

@@ -22,6 +22,33 @@ Item {
   property alias runningRepeater: runningRepeater
   property alias foldersRepeater: foldersRepeater
   property alias drivesRepeater: drivesRepeater
+  readonly property bool folderDropActive: folderDrop.containsDrag
+
+  // Insert index among the pinned folders for a pointer at row x: before the
+  // first folder whose icon centre lies right of it. The icon sits right of
+  // any open gap, so moving through the gap keeps the same index.
+  // The folder section of the row: from the folder divider on, or, with no
+  // divider (no folders or drives yet, or nothing before them), the last
+  // three quarters of a slot at the end of the row and beyond.
+  function inPinZone(px) {
+    if (folderSeparator.visible) return px >= folderSeparator.x - (root ? root.gapWidth : 0)
+    if (foldersRepeater.count > 0) {
+      var first = foldersRepeater.itemAt(0)
+      if (first) return px >= first.x
+    }
+    return px >= row.width - (root ? root.iconSlot * 0.75 : 0)
+  }
+
+  function folderInsertIndex(px) {
+    var n = foldersRepeater ? foldersRepeater.count : 0
+    for (var i = 0; i < n; i++) {
+      var it = foldersRepeater.itemAt(i)
+      if (!it) continue
+      var iconCenter = it.x + it.width - (root ? root.iconSlot : it.width) / 2
+      if (px < iconCenter) return i
+    }
+    return n
+  }
 
   function handleDragMoved(aid, mx) {
     if (!root) return
@@ -164,29 +191,95 @@ Item {
       id: hitboxHover
       onHoveredChanged: if (root) root.syncVisibility()
     }
+
+    // Folders dragged in from a file manager get pinned as stacks, at the
+    // spot the pointer picks among the pinned folders. Dropping on an app
+    // icon (its own DropArea, above this one) opens the item instead, and
+    // that comes first: pinning only happens in the folder section, after
+    // the pointer has rested there for pinDwell. Anywhere else the drag is
+    // refused, so a folder let go over the apps is never pinned by accident.
+    DropArea {
+      id: folderDrop
+      anchors.fill: parent
+      keys: ["text/uri-list"]
+
+      function track(drag) {
+        if (!root) return
+        var rx = folderDrop.mapToItem(row, drag.x, drag.y).x
+        if (cardWrapper.inPinZone(rx)) {
+          root.dropInsertIndex = cardWrapper.folderInsertIndex(rx)
+          if (!root.dropPinArmed && !pinDwell.running) pinDwell.restart()
+          drag.accepted = true
+        } else {
+          pinDwell.stop()
+          root.dropPinArmed = false
+          drag.accepted = false
+        }
+      }
+
+      onEntered: function(drag) {
+        if (root) {
+          root.externalDragOver = true
+          root.previewDraggedFolder(drag.urls)
+        }
+        folderDrop.track(drag)
+      }
+      onPositionChanged: function(drag) { folderDrop.track(drag) }
+      onExited: {
+        pinDwell.stop()
+        if (root) root.externalDragOver = false
+      }
+      onDropped: function(drop) {
+        pinDwell.stop()
+        if (!root) return
+        var armed = root.dropPinArmed && root.dropCandidatePath !== ""
+        root.externalDragOver = false
+        if (armed) {
+          root.pinDroppedFolders(drop.urls)
+          drop.accept(Qt.LinkAction)
+        } else {
+          drop.accepted = false
+        }
+      }
+    }
+
+    // How long the pointer rests in the folder section before the gap opens
+    // and a drop would pin.
+    Timer {
+      id: pinDwell
+      interval: 450
+      onTriggered: if (root) root.dropPinArmed = true
+    }
   }
 
+  // Card shadow: the card's own shape (same radius), blurred and dropped a
+  // little, so a square card casts a square-ish shadow instead of a soft
+  // oval. Only drawn under a visible background; without one, each icon
+  // casts its own shadow instead (see DockIconArt).
   Item {
     id: cardShadow
-    visible: root ? root.showShadow : true
+    readonly property real spread: Style.space(12)
+    visible: root ? (root.showShadow && root.showBackground && root.shadowStrength > 0) : true
     // Follows the card out of view; a blur left behind would hang on screen
     // after the dock has gone.
     opacity: cardWrapper.opacity
     anchors.fill: dockCard
-    anchors.margins: -Style.space(16)
+    anchors.margins: -spread
+    anchors.topMargin: -spread + Style.space(3)
+    anchors.bottomMargin: -spread - Style.space(3)
     z: 0
     layer.enabled: true
     layer.effect: MultiEffect {
       blurEnabled: true
       blur: 1.0
-      blurMax: 36
+      blurMax: 20
     }
 
     Rectangle {
       anchors.fill: parent
-      anchors.margins: Style.space(16)
+      anchors.margins: cardShadow.spread
       radius: dockCard.radius
-      color: Qt.rgba(0, 0, 0, (root && root.dockBgColor === "none") ? 0.52 : 0.40)
+      color: Qt.rgba(0, 0, 0, root ? root.shadowStrength : 0.4)
     }
   }
 
@@ -200,7 +293,13 @@ Item {
       return root.dockBgColor
     }
 
-    readonly property real effectiveBorderWidth: 1.5
+    // Whole device pixels for the rim and the padding: at a fractional scale
+    // (1.5) a 1.5 px rim puts everything inside the card a fraction of a pixel
+    // off the grid, and the unsmoothed square indicators then lose or gain a
+    // row depending on the border setting.
+    readonly property real dpr: root ? root.outputScale : 1
+    function devSnap(v) { return v <= 0 ? 0 : Math.max(1, Math.round(v * dockCard.dpr)) / dockCard.dpr }
+    readonly property real effectiveBorderWidth: dockCard.devSnap(root ? root.borderWidth : 1.5)
     readonly property color effectiveBorderColor: {
       if (!root) return Util.alpha(Color.menu.border, 0.48)
       // Specular Frosted Glass Rim: Crisp highlight with high alpha for contrast on dark and light surfaces
@@ -212,14 +311,53 @@ Item {
       return Util.alpha(root.dockForeground, rimAlpha)
     }
 
-    color: (root && !root.showBackground) ? "transparent"
+    // A gradient fill is drawn by the layer below instead of the card colour.
+    readonly property bool gradientFill: root ? (root.showBackground && root.bgFill === "gradient") : false
+    color: (root && (!root.showBackground || dockCard.gradientFill)) ? "transparent"
       : ((root && root.dockBgColor === "none") ? effectiveBgColor : Util.alpha(effectiveBgColor, root ? root.effectiveDockOpacity : 1.0))
     borderSpec: (root && !root.showBorder)
       ? Border.none()
       : Border.flat(dockCard.effectiveBorderColor, dockCard.effectiveBorderWidth)
     radius: root ? root.cardRadius(height) : Style.cornerRadius
-    padding: Style.space(5)
+    padding: dockCard.devSnap(Style.space(5))
     z: 1
+
+    // Gradient fill (shaders/gradient.frag): the palette's colours fading
+    // into each other over the theme background, at the dock's opacity. Under
+    // the grain and the icons; built only while the gradient is on.
+    Loader {
+      anchors.fill: parent
+      z: 0.25
+      active: dockCard.gradientFill
+      sourceComponent: ShaderEffect {
+        readonly property var palette: root ? root.gradientColors : []
+        property color base: Util.alpha(Color.bar.background, root ? root.effectiveDockOpacity : 1.0)
+        property color c1: palette.length > 0 ? palette[0] : "transparent"
+        property color c2: palette.length > 1 ? palette[1] : c1
+        property color c3: palette.length > 2 ? palette[2] : c2
+        property real count: palette.length > 2 ? 3 : 2
+        property real strength: root ? root.gradientStrength : 0.6
+        property real radius: dockCard.radius
+        property size size: Qt.size(width, height)
+        fragmentShader: Qt.resolvedUrl("../shaders/gradient.frag.qsb")
+      }
+    }
+
+    // Film grain over the background (shaders/grain.frag), in the style of
+    // Zen / Arc browser themes: soft grey specks at low opacity, cut to the
+    // card's rounded shape. Static, so it costs nothing between frames;
+    // built only while grain is on.
+    Loader {
+      anchors.fill: parent
+      z: 0.5
+      active: root ? (root.showBackground && root.grain > 0) : false
+      sourceComponent: ShaderEffect {
+        property real strength: root ? root.grain : 0
+        property real radius: dockCard.radius
+        property size size: Qt.size(width, height)
+        fragmentShader: Qt.resolvedUrl("../shaders/grain.frag.qsb")
+      }
+    }
 
     HoverHandler {
       id: cardHover
@@ -238,9 +376,10 @@ Item {
       onClicked: function(mouse) {
         if (!root) return
         if (mouse.button === Qt.RightButton) {
-          // Right-click on the dock background (or the Omarchy button) opens
-          // the full settings panel directly.
-          root.openSettingsPanel()
+          // Right-click on the dock background opens the dock menu too, so it
+          // stays reachable when the Omarchy button is hidden.
+          var pt = root.contentItemRef ? cardArea.mapToItem(root.contentItemRef, mouse.x, 0) : null
+          root.openDockSettingsMenu(pt ? pt.x : mouse.x, 0)
           return
         }
         if (root.contextAppId !== "") root.closeContext()
@@ -276,7 +415,7 @@ Item {
         onMiddleClicked: Quickshell.execDetached(["omarchy-launch-terminal"])
         onWheelScrolled: function(dir) { if (root) root.cycleWorkspace(dir) }
         onMenuRequested: function(cx, cy) {
-          if (root) root.openSettingsPanel()
+          if (root) root.openDockSettingsMenu(cx, cy)
         }
       }
 
@@ -334,6 +473,7 @@ Item {
       Rectangle {
         visible: root ? root.hasLeftTileSeparator : false
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root ? root.iconCenterOffset : 0
         width: Style.space(1)
         height: root ? (root.iconSize * 0.7) : 24
         color: Util.alpha(root ? root.dockForeground : Color.bar.text, 0.25)
@@ -357,6 +497,7 @@ Item {
         id: separator
         visible: root ? root.hasSeparator : false
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root ? root.iconCenterOffset : 0
         width: Style.space(1)
         height: root ? (root.iconSize * 0.7) : 24
         color: Util.alpha(root ? root.dockForeground : Color.bar.text, 0.25)
@@ -414,6 +555,7 @@ Item {
         id: folderSeparator
         visible: root ? root.hasFolderSeparator : false
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root ? root.iconCenterOffset : 0
         width: Style.space(1)
         height: root ? (root.iconSize * 0.7) : 24
         color: Util.alpha(root ? root.dockForeground : Color.bar.text, 0.25)
@@ -427,6 +569,7 @@ Item {
           folderPath: modelData.path
           name: modelData.name || "Folder"
           icon: modelData.icon || DockModel.folderIconFor(modelData.path, "")
+          slotIndex: index
           homeCenter: root ? root.slotHomeCenter(
             root.appsSlots + root.pinnedSection.length + root.groupSlots + (root.hasLeftTileSeparator ? 1 : 0) + (root.hasSeparator ? 1 : 0) + root.tileElements + root.visibleRunningCount + (root.hasFolderSeparator ? 1 : 0) + index,
             root.appsSlots + root.pinnedSection.length + root.groupSlots + root.visibleRunningCount + index,
@@ -439,6 +582,16 @@ Item {
             if (root) root.openFolderContext(fpath, fname, cx, cy)
           }
         }
+      }
+
+      // Drop gap after the last pinned folder (see DockFolderItem.gapWidth).
+      DropGhost {
+        id: trailingDropGap
+        rootRef: cardWrapper.rootRef
+        readonly property bool open: root ? (root.dropPreviewPath !== "" && root.dropInsertIndex >= foldersRepeater.count) : false
+        width: open && root ? root.iconSlot : 0
+        height: root ? root.iconSlot : 0
+        Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
       }
 
       Repeater {
@@ -466,6 +619,17 @@ Item {
           }
         }
       }
+    }
+
+    // Outline while a drag from outside hovers the dock (see folderDrop).
+    Rectangle {
+      anchors.fill: parent
+      visible: root ? root.externalDragOver : false
+      color: Util.alpha(Color.accent, 0.08)
+      radius: dockCard.radius
+      border.color: Color.accent
+      border.width: 2
+      z: 20
     }
 
     // Drop indicator line

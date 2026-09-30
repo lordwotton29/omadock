@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import qs.Commons
 import qs.Ui
@@ -74,13 +75,25 @@ Item {
 
     Item {
       id: iconContainer
-      width: root ? root.iconSize : 0
-      height: root ? root.iconSize : 0
+      width: root ? root.baseIconArt : 0
+      height: width
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: gitem.hasRunningApps ? Style.space(5) : Math.round((iconSlot.height - height) / 2)
+      anchors.bottomMargin: root ? root.iconArtBottom : 0
       scale: gitem.magnifyScale
       transformOrigin: Item.Bottom
+
+      // Without a dock card, the tile casts its own shadow like the icons.
+      layer.enabled: root ? root.iconShadow : false
+      layer.smooth: true
+      layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: "#000000"
+        shadowOpacity: root ? root.shadowStrength : 0.4
+        shadowBlur: 0.45
+        shadowVerticalOffset: Math.max(1, Math.round(iconContainer.height * 0.05))
+        autoPaddingEnabled: true
+      }
 
       // Drop target halo
       Rectangle {
@@ -88,7 +101,8 @@ Item {
         anchors.centerIn: parent
         width: parent.width + Style.space(8)
         height: width
-        radius: root ? root.effectiveCardRadius : Style.cornerRadius
+        // Follows the tile's own shape, a little wider.
+        radius: folderTile.radius > 0 ? folderTile.radius + Style.space(4) : 0
         color: Util.alpha(Color.accent, 0.22)
         border.color: Color.accent
         border.width: 1.5
@@ -101,14 +115,17 @@ Item {
         }
       }
 
-      // Frosted Folder Tile Container (macOS / iOS Launchpad Folder style)
+      // Folder tile (macOS / iOS Launchpad folder style). groupStyle picks
+      // the frame: a softly rounded rim, a square rim, or none at all (just
+      // the mini-icon grid).
       Rectangle {
         id: folderTile
+        readonly property string tileStyle: root ? root.groupStyle : "rounded"
         anchors.fill: parent
-        radius: root ? root.effectiveCardRadius : Style.cornerRadius
-        color: Util.alpha(Color.bar.background, 0.65)
-        border.color: Util.alpha(Color.menu.border, 0.65)
-        border.width: 1
+        radius: tileStyle === "rounded" ? Math.round(width * 0.18) : 0
+        color: tileStyle === "none" ? "transparent" : Util.alpha(Color.bar.background, 0.4)
+        border.color: Util.alpha(Color.menu.border, 0.45)
+        border.width: tileStyle === "none" ? 0 : 1
 
         // Empty folder fallback icon
         Image {
@@ -133,7 +150,8 @@ Item {
             model: gitem.groupApps.slice(0, 4)
             delegate: Item {
               id: miniCell
-              readonly property real miniSize: Math.round(iconContainer.width * 0.36)
+              // Without a frame the grid can use the whole tile.
+              readonly property real miniSize: Math.round(iconContainer.width * (folderTile.tileStyle === "none" ? 0.46 : 0.36))
               width: miniSize
               height: miniSize
 
@@ -153,14 +171,17 @@ Item {
                 return Quickshell.iconPath("application-x-executable", true)
               }
 
-              Image {
+              DockIconArt {
                 anchors.fill: parent
                 source: miniCell.miniSource
-                sourceSize: Qt.size(miniCell.miniSize * 2, miniCell.miniSize * 2)
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                smooth: true
-                mipmap: true
+                renderSize: miniCell.miniSize * 2
+                iconStyle: root ? root.iconStyle : "original"
+                tint: root ? root.iconTintColor : Color.bar.text
+                // Same cell size as a full icon, so the minis match it.
+                grid: root ? Math.round(root.iconGrid * miniCell.miniSize / Math.max(1, root.baseIconArt)) : 8
+                contrast: root ? root.iconContrast : 0
+                strength: root ? root.iconStrength : 1
+                showOriginal: root ? (root.iconHoverOriginal && groupArea.containsMouse) : false
               }
             }
           }
@@ -176,22 +197,17 @@ Item {
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Style.space(1)
-    spacing: Style.space(2)
-    visible: gitem.hasRunningApps
+    spacing: Style.space(3)
+    visible: gitem.hasRunningApps || gitem.isOpen
 
+    // Same marks as an app: the first turns into the accent bar while one
+    // of the group's apps has focus or the group is open.
     Repeater {
       model: Math.min(3, Math.max(1, gitem.groupRunningInfo.count))
-      delegate: Rectangle {
-        width: (gitem.groupRunningInfo.active && index === 0) ? Style.space(12) : Style.space(4)
-        height: Style.space(4)
-        radius: height / 2
-        color: (gitem.groupRunningInfo.active && index === 0) || gitem.isOpen
-          ? Color.accent
-          : Util.alpha(root ? root.dockForeground : Color.bar.text, 0.88)
-        border.color: Qt.rgba(0, 0, 0, 0.45)
-        border.width: 1
-        Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-        Behavior on color { ColorAnimation { duration: 120 } }
+      delegate: DockIndicator {
+        rootRef: gitem.rootRef
+        anchors.verticalCenter: parent.verticalCenter
+        kind: index === 0 && (gitem.groupRunningInfo.active || gitem.isOpen) ? "active" : "window"
       }
     }
   }

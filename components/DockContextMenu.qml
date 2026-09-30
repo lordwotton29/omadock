@@ -16,6 +16,10 @@ BorderSurface {
 
   property alias appContextMenuColumn: appContextMenuColumn
 
+  // Folder menu page: "" (actions), "sort" (Sort By) or "view" (View As).
+  property string folderPage: ""
+  onFolderPageChanged: menuFlickable.contentY = 0
+
   visible: root ? (root.contextAppId !== "") : false
   z: 100
   color: Color.menu.background
@@ -23,7 +27,7 @@ BorderSurface {
   radius: Style.cornerRadius
   padding: Style.space(4)
 
-  readonly property real rowWidth: (root && root.contextAppId !== "" && root.settingsSubmenu !== undefined)
+  readonly property real rowWidth: (root && root.contextAppId !== "")
     ? root.menuContentWidth(menuColumn)
     : 0
 
@@ -44,8 +48,10 @@ BorderSurface {
 
   Connections {
     target: root
-    function onContextAppIdChanged() { menuFlickable.contentY = 0 }
-    function onSettingsSubmenuChanged() { menuFlickable.contentY = 0 }
+    function onContextAppIdChanged() {
+      menuFlickable.contentY = 0
+      contextMenu.folderPage = ""
+    }
   }
 
   Flickable {
@@ -81,977 +87,39 @@ BorderSurface {
       width: parent.width
       spacing: Style.space(2)
 
-    // Dock Settings Menu (when right-clicking leftmost Omarchy icon)
+    // Dock menu (right-click on the Omarchy button or the dock background):
+    // quick toggles plus the way into the full settings panel, which holds
+    // every option the old category pages used to carry.
     Column {
-      spacing: Style.space(1)
+      spacing: Style.space(2)
       visible: root ? root.contextAppId === "__dock_settings__" : false
 
-      // 1. Main Categories Page (Minimalist & Categorized)
-      Column {
-        spacing: Style.space(2)
-        visible: root ? root.settingsSubmenu === "" : false
-
-        ContextRow {
-          text: "Omadock Settings"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Dock Settings…"
-          textColor: Color.accent
-          onTriggered: { if (root) root.openSettingsPanel() }
-        }
-
-        MenuDivider {}
-
-        ContextRow {
-          text: "Appearance ›"
-          onTriggered: { if (root) root.settingsSubmenu = "appearance" }
-        }
-
-        ContextRow {
-          text: "Placement & Alignment ›"
-          onTriggered: { if (root) root.settingsSubmenu = "alignment" }
-        }
-
-        ContextRow {
-          text: "Behavior & Windows ›"
-          onTriggered: { if (root) root.settingsSubmenu = "behavior" }
-        }
-
-        ContextRow {
-          text: "Effects & Animations ›"
-          onTriggered: { if (root) root.settingsSubmenu = "effects" }
-        }
-
-        ContextRow {
-          text: "Size & Spacing ›"
-          onTriggered: { if (root) root.settingsSubmenu = "size_spacing" }
-        }
-
-        ContextRow {
-          text: "Folders & Stacks ›"
-          onTriggered: { if (root) root.settingsSubmenu = "folders" }
-        }
-
-        ContextRow {
-          text: "App Folders & Groups ›"
-          onTriggered: { if (root) root.settingsSubmenu = "app_groups" }
-        }
+      ContextRow {
+        text: "Omadock"
+        isHeader: true
       }
 
-      // Placement & Alignment Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "alignment" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Dock Alignment"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Center (Default)"
-          checked: root ? (root.alignment === "center" || !root.alignment) : true
-          onTriggered: { if (root) root.setDockAlignment("center") }
-        }
-
-        ContextRow {
-          text: "Left Aligned"
-          checked: root ? root.alignment === "left" : false
-          onTriggered: { if (root) root.setDockAlignment("left") }
-        }
-
-        ContextRow {
-          text: "Right Aligned"
-          checked: root ? root.alignment === "right" : false
-          onTriggered: { if (root) root.setDockAlignment("right") }
-        }
-
-        ContextRow {
-          text: "Monitors"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Show on All Monitors"
-          checked: root ? root.multiMonitor : false
-          onTriggered: {
-            if (root) {
-              root.multiMonitor = !root.multiMonitor
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Only This Monitor's Apps"
-          checked: root ? root.perMonitorApps : true
-          visible: root ? root.multiMonitor : false
-          onTriggered: {
-            if (root) {
-              root.perMonitorApps = !root.perMonitorApps
-              root.saveConfig()
-            }
-          }
-        }
+      ContextRow {
+        text: "Dock Settings…"
+        textColor: Color.accent
+        onTriggered: { if (root) root.openSettingsPanel() }
       }
 
-      // App Folders & Groups Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "app_groups" : false
+      MenuDivider {}
 
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "App Folders & Groups"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "+ Create Group from Running Apps..."
-          textColor: Color.accent
-          onTriggered: {
-            if (root) {
-              root.createAppGroupFromRunning()
-              root.settingsSubmenu = ""
-              root.closeContext()
-            }
-          }
-        }
-
-        MenuDivider {}
-
-        Repeater {
-          model: (root && root.appGroups) ? root.appGroups : []
-          delegate: ContextRow {
-            text: (modelData.name || "Group") + " (" + (modelData.apps ? modelData.apps.length : 0) + " apps) - Remove"
-            danger: true
-            onTriggered: {
-              if (root) {
-                root.removeAppGroup(modelData.id)
-              }
-            }
-          }
-        }
+      ContextRow {
+        text: "Autohide"
+        checked: root ? root.autohide : false
+        onTriggered: { if (root) root.setAutohideMode(root.autohide ? "always" : "intelligent") }
       }
 
-      // Folders & Stacks Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "folders" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Folder Color: " + (root ? root.folderColorLabel(root.folderColor) : "") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "folder_color" }
-        }
-
-        MenuDivider {}
-
-        ContextRow {
-          text: "Pinned Folder Stacks"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "+ Add Custom Folder..."
-          textColor: Color.accent
-          onTriggered: {
-            if (root && root.customFolderPickerProc) root.customFolderPickerProc.running = true
-            if (root) root.closeContext()
+      ContextRow {
+        text: "Create Group from Running Apps"
+        onTriggered: {
+          if (root) {
+            root.createAppGroupFromRunning()
+            root.closeContext()
           }
-        }
-
-        MenuDivider {}
-
-        ContextRow {
-          text: "Downloads (~/Downloads)"
-          checked: root ? root.isFolderPinned("~/Downloads") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Downloads", "Downloads", "folder-download") }
-        }
-
-        ContextRow {
-          text: "Documents (~/Documents)"
-          checked: root ? root.isFolderPinned("~/Documents") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Documents", "Documents", "folder-documents") }
-        }
-
-        ContextRow {
-          text: "Pictures (~/Pictures)"
-          checked: root ? root.isFolderPinned("~/Pictures") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Pictures", "Pictures", "folder-pictures") }
-        }
-
-        ContextRow {
-          text: "Projects (~/Projects)"
-          checked: root ? root.isFolderPinned("~/Projects") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Projects", "Projects", "folder-development") }
-        }
-
-        ContextRow {
-          text: "Music (~/Music)"
-          checked: root ? root.isFolderPinned("~/Music") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Music", "Music", "folder-music") }
-        }
-
-        ContextRow {
-          text: "Videos (~/Videos)"
-          checked: root ? root.isFolderPinned("~/Videos") : false
-          onTriggered: { if (root) root.toggleFolderPin("~/Videos", "Videos", "folder-videos") }
-        }
-
-        ContextRow {
-          text: "Home (~/)"
-          checked: root ? root.isFolderPinned("~") : false
-          onTriggered: { if (root) root.toggleFolderPin("~", "Home", "user-home") }
-        }
-
-        MenuDivider {}
-
-        ContextRow {
-          text: "Show Removable USB Drives"
-          checked: root ? root.showRemovableDrives : true
-          onTriggered: {
-            if (root) {
-              root.showRemovableDrives = !root.showRemovableDrives
-              root.saveConfig()
-              root.scanRemovableDrives()
-            }
-          }
-        }
-      }
-
-      // Folders & Stacks > Folder Color Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "folder_color" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "folders" }
-        }
-
-        ContextRow {
-          text: "Folder Color & Style"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Auto (Match Theme)"
-          checked: root ? (root.folderColor === "theme" || !root.folderColor) : true
-          onTriggered: { if (root) root.setFolderColor("theme") }
-        }
-
-        MenuDivider {}
-
-        ContextRow {
-          text: "Color Presets"
-          isHeader: true
-        }
-
-        Item {
-          readonly property bool isMenuContent: true
-          implicitWidth: Math.max(220, 6 * Style.space(24) + 5 * Style.space(4) + Style.space(16))
-          implicitHeight: 2 * Style.space(24) + Style.space(4) + Style.space(8)
-          width: contextMenu.rowWidth > 0 ? contextMenu.rowWidth : implicitWidth
-          height: implicitHeight
-
-          Grid {
-            anchors.centerIn: parent
-            columns: 6
-            spacing: Style.space(4)
-
-            readonly property var colorPresets: [
-              { id: "white", name: "White", color: "#ffffff" },
-              { id: "black", name: "Black", color: "#111111" },
-              { id: "Yaru-sage", name: "Sage Green", color: "#61895a" },
-              { id: "Yaru-olive", name: "Olive", color: "#878846" },
-              { id: "Yaru-blue", name: "Blue", color: "#3d7ab8" },
-              { id: "Yaru-purple", name: "Purple", color: "#775aa6" },
-              { id: "Yaru-magenta", name: "Magenta", color: "#b3497d" },
-              { id: "Yaru-red", name: "Red", color: "#c73838" },
-              { id: "Yaru-yellow", name: "Yellow", color: "#d9a13b" },
-              { id: "Yaru-wartybrown", name: "Brown", color: "#8a583e" },
-              { id: "Yaru-prussiangreen", name: "Teal", color: "#2d7f7b" },
-              { id: "Yaru-dark", name: "Charcoal", color: "#3c3b37" }
-            ]
-
-            Repeater {
-              model: parent.colorPresets
-              delegate: Rectangle {
-                id: fColorSwatch
-                required property var modelData
-                width: Style.space(24)
-                height: Style.space(24)
-                radius: Style.space(4)
-                color: modelData.color
-                border.color: (root && root.folderColor === modelData.id)
-                  ? Color.accent
-                  : Util.alpha(Color.menu.border, 0.8)
-                border.width: (root && root.folderColor === modelData.id) ? 2 : 1
-
-                Rectangle {
-                  visible: root && (root.folderColor === fColorSwatch.modelData.id)
-                  anchors.centerIn: parent
-                  width: Style.space(8)
-                  height: Style.space(8)
-                  radius: Style.space(4)
-                  color: fColorSwatch.modelData.id === "white" ? "#111111" : "#ffffff"
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: { if (root) root.setFolderColor(fColorSwatch.modelData.id) }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // 2. Appearance Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "appearance" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Appearance"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Shape: " + (root ? (root.dockShape === "theme" || root.dockShape === "auto" ? "Auto (Theme)" : (root.dockShape === "round" || root.dockShape === "pill" ? "Round" : (root.dockShape === "square" ? "Square" : "Rounded"))) : "Rounded") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "shape" }
-        }
-
-        ContextRow {
-          text: "Opacity: " + (root ? (root.dockOpacity < 0 ? "Auto (Theme)" : (root.dockOpacity >= 0.95 ? "Opaque" : (root.dockOpacity >= 0.75 ? "Glass" : (root.dockOpacity >= 0.55 ? "Frosted Glass" : (root.dockOpacity >= 0.20 ? "Translucent" : "Transparent"))))) : "Opaque") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "opacity" }
-        }
-
-        ContextRow {
-          text: "Color: " + (root ? (root.dockBgColor === "theme" || !root.dockBgColor ? "Theme" : (root.dockBgColor === "none" ? "No Color" : "Custom")) : "Theme") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "color" }
-        }
-      }
-
-      // 3. Behavior & Windows Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "behavior" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Behavior & Windows"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Autohide: " + (root ? (root.autohide ? (root.intelligentAutohide ? "Intelligent" : "Auto Hide") : "Always Show") : "Intelligent") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "autohide" }
-        }
-
-        ContextRow {
-          text: "Minimize On Click: " + (root ? (root.minimizeMode === "all" ? "All Windows" : (root.minimizeMode === "active" ? "Active Window" : "Disabled")) : "Active Window") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "minimize" }
-        }
-
-        ContextRow {
-          text: "Urgent Highlights"
-          checked: root ? root.showUrgentHint : true
-          onTriggered: {
-            if (root) {
-              root.showUrgentHint = !root.showUrgentHint
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Urgent On Notification"
-          checked: root ? root.urgentOnNotification : true
-          onTriggered: {
-            if (root) {
-              root.urgentOnNotification = !root.urgentOnNotification
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Urgent Sound: " + (root ? (root.urgentSoundName === "message-new-instant" ? "Message" : (root.urgentSoundName === "complete" ? "Complete" : (root.urgentSoundName === "dialog-information" ? "Information" : (root.urgentSoundName === "dialog-warning" ? "Warning" : (root.urgentSoundName === "phone-incoming-call" ? "Phone" : (root.urgentSoundName === "alarm-clock-elapsed" ? "Alarm" : (root.urgentSoundName === "none" ? "Mute" : "Bell"))))))) : "Bell") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "urgent_sound" }
-        }
-      }
-
-      // 4. Effects & Animations Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "effects" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Effects & Animations"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Hover: " + (root ? (root.hoverEffect === "wave" ? "Wave" : (root.hoverEffect === "off" ? "None" : "Zoom")) : "Zoom") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "hover" }
-        }
-
-        ContextRow {
-          text: "Launch Bounce"
-          checked: root ? root.launchBounce : true
-          onTriggered: {
-            if (root) {
-              root.launchBounce = !root.launchBounce
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Window Previews"
-          checked: root ? root.advancedTooltips : true
-          onTriggered: {
-            if (root) {
-              root.advancedTooltips = !root.advancedTooltips
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Show Tooltips"
-          checked: root ? root.showTooltips : true
-          onTriggered: {
-            if (root) {
-              root.showTooltips = !root.showTooltips
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Minimized Window Previews"
-          checked: root ? root.showMinimizedTiles : true
-          onTriggered: {
-            if (root) {
-              root.showMinimizedTiles = !root.showMinimizedTiles
-              root.saveConfig()
-            }
-          }
-        }
-      }
-
-      // Hover Effect Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "hover" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "effects" }
-        }
-
-        ContextRow {
-          text: "Hover Effect"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Zoom"
-          checked: root ? (root.hoverEffect !== "wave" && root.hoverEffect !== "off") : true
-          onTriggered: { if (root) root.setHoverEffect("zoom") }
-        }
-
-        ContextRow {
-          text: "Wave"
-          checked: root ? (root.hoverEffect === "wave") : false
-          onTriggered: { if (root) root.setHoverEffect("wave") }
-        }
-
-        ContextRow {
-          text: "None"
-          checked: root ? (root.hoverEffect === "off") : false
-          onTriggered: { if (root) root.setHoverEffect("off") }
-        }
-      }
-
-      // 5. Size & Spacing Category Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "size_spacing" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "" }
-        }
-
-        ContextRow {
-          text: "Size & Spacing"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Icon Size: " + (root ? root.iconSize : 36) + "px ›"
-          onTriggered: { if (root) root.settingsSubmenu = "size" }
-        }
-
-        ContextRow {
-          text: "Spacing: " + (root ? (root.itemSpacing <= 2 ? "Compact" : (root.itemSpacing <= 5 ? "Normal" : "Relaxed")) : "Normal") + " ›"
-          onTriggered: { if (root) root.settingsSubmenu = "spacing" }
-        }
-      }
-
-      // 6. Autohide Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "autohide" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "behavior" }
-        }
-
-        ContextRow {
-          text: "Autohide Mode"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Always Show"
-          checked: root ? !root.autohide : false
-          onTriggered: { if (root) root.setAutohideMode("always") }
-        }
-
-        ContextRow {
-          text: "Intelligent Autohide"
-          checked: root ? (root.autohide && root.intelligentAutohide) : true
-          onTriggered: { if (root) root.setAutohideMode("intelligent") }
-        }
-
-        ContextRow {
-          text: "Auto Hide"
-          checked: root ? (root.autohide && !root.intelligentAutohide) : false
-          onTriggered: { if (root) root.setAutohideMode("autohide") }
-        }
-      }
-
-      // 7. Minimize Mode Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "minimize" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "behavior" }
-        }
-
-        ContextRow {
-          text: "Minimize On Click"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Disabled"
-          checked: root ? (root.minimizeMode === "off") : false
-          onTriggered: {
-            if (root) {
-              root.minimizeMode = "off"
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "Active Window (Most Recent)"
-          checked: root ? (root.minimizeMode === "active") : true
-          onTriggered: {
-            if (root) {
-              root.minimizeMode = "active"
-              root.saveConfig()
-            }
-          }
-        }
-
-        ContextRow {
-          text: "All Windows of App"
-          checked: root ? (root.minimizeMode === "all") : false
-          onTriggered: {
-            if (root) {
-              root.minimizeMode = "all"
-              root.saveConfig()
-            }
-          }
-        }
-      }
-
-      // Urgent Sound Alert Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "urgent_sound" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "behavior" }
-        }
-
-        ContextRow {
-          text: "Urgent Sound Alert"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Bell (Default)"
-          checked: root ? (root.urgentSoundName === "bell") : true
-          onTriggered: { if (root) root.setUrgentSoundName("bell") }
-        }
-
-        ContextRow {
-          text: "Message Chime"
-          checked: root ? (root.urgentSoundName === "message-new-instant") : false
-          onTriggered: { if (root) root.setUrgentSoundName("message-new-instant") }
-        }
-
-        ContextRow {
-          text: "Complete Ding"
-          checked: root ? (root.urgentSoundName === "complete") : false
-          onTriggered: { if (root) root.setUrgentSoundName("complete") }
-        }
-
-        ContextRow {
-          text: "Information Pop"
-          checked: root ? (root.urgentSoundName === "dialog-information") : false
-          onTriggered: { if (root) root.setUrgentSoundName("dialog-information") }
-        }
-
-        ContextRow {
-          text: "Warning Alert"
-          checked: root ? (root.urgentSoundName === "dialog-warning") : false
-          onTriggered: { if (root) root.setUrgentSoundName("dialog-warning") }
-        }
-
-        ContextRow {
-          text: "Phone Ring"
-          checked: root ? (root.urgentSoundName === "phone-incoming-call") : false
-          onTriggered: { if (root) root.setUrgentSoundName("phone-incoming-call") }
-        }
-
-        ContextRow {
-          text: "Alarm Beeps"
-          checked: root ? (root.urgentSoundName === "alarm-clock-elapsed") : false
-          onTriggered: { if (root) root.setUrgentSoundName("alarm-clock-elapsed") }
-        }
-
-        ContextRow {
-          text: "Mute / Silent"
-          checked: root ? (root.urgentSoundName === "none") : false
-          onTriggered: { if (root) root.setUrgentSoundName("none") }
-        }
-      }
-
-      // 8. Shape Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "shape" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "appearance" }
-        }
-
-        ContextRow {
-          text: "Dock Shape"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Auto (Theme)"
-          checked: root ? (root.dockShape === "theme" || root.dockShape === "auto") : true
-          onTriggered: { if (root) root.setDockShape("theme") }
-        }
-
-        ContextRow {
-          text: "Rounded"
-          checked: root ? (root.dockShape === "rounded") : false
-          onTriggered: { if (root) root.setDockShape("rounded") }
-        }
-
-        ContextRow {
-          text: "Round (Pill)"
-          checked: root ? (root.dockShape === "round" || root.dockShape === "pill") : false
-          onTriggered: { if (root) root.setDockShape("round") }
-        }
-
-        ContextRow {
-          text: "Square"
-          checked: root ? (root.dockShape === "square") : false
-          onTriggered: { if (root) root.setDockShape("square") }
-        }
-      }
-
-      // 9. Background Color Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "color" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "appearance" }
-        }
-
-        ContextRow {
-          text: "Background Color"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Theme (Default)"
-          checked: root ? (root.dockBgColor === "theme" || !root.dockBgColor) : true
-          onTriggered: { if (root) root.setDockBgColor("theme") }
-        }
-
-        ContextRow {
-          text: "No Color"
-          checked: root ? (root.dockBgColor === "none") : false
-          onTriggered: { if (root) root.setDockBgColor("none") }
-        }
-
-        Rectangle {
-          width: parent.width
-          height: 1
-          color: Util.alpha(Color.menu.border, 0.4)
-        }
-
-        ContextRow {
-          text: "Presets"
-          isHeader: true
-        }
-
-        Item {
-          readonly property bool isMenuContent: true
-          implicitWidth: Math.max(220, 5 * Style.space(24) + 4 * Style.space(4) + Style.space(16))
-          implicitHeight: 2 * Style.space(24) + Style.space(4) + Style.space(8)
-          width: contextMenu.rowWidth > 0 ? contextMenu.rowWidth : implicitWidth
-          height: implicitHeight
-
-          Grid {
-            id: swatchGrid
-            anchors.centerIn: parent
-            columns: 5
-            spacing: Style.space(4)
-
-            readonly property var presetColors: [
-              "#000000", "#181825", "#1e1e2e", "#0f172a", "#111827",
-              "#062e24", "#1c1917", "#2c0b16", "#1e102d", "#334155"
-            ]
-
-            Repeater {
-              model: parent.presetColors
-              delegate: Rectangle {
-                id: swatchRect
-                required property string modelData
-                width: Style.space(24)
-                height: Style.space(24)
-                radius: Style.space(4)
-                color: modelData
-                border.color: (root && root.dockBgColor === modelData)
-                  ? Color.accent
-                  : Util.alpha(Color.menu.border, 0.8)
-                border.width: (root && root.dockBgColor === modelData) ? 2 : 1
-
-                Rectangle {
-                  visible: root && (root.dockBgColor === swatchRect.modelData)
-                  anchors.centerIn: parent
-                  width: Style.space(8)
-                  height: Style.space(8)
-                  radius: Style.space(4)
-                  color: Color.accent
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: { if (root) root.setDockBgColor(swatchRect.modelData) }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // 10. Background Opacity Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "opacity" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "appearance" }
-        }
-
-        ContextRow {
-          text: "Background Opacity"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Auto (Theme)"
-          checked: root ? (root.dockOpacity < 0) : true
-          onTriggered: { if (root) root.setDockOpacity(-1.0) }
-        }
-
-        ContextRow {
-          text: "Opaque (100%)"
-          checked: root ? (root.dockOpacity >= 0.95) : false
-          onTriggered: { if (root) root.setDockOpacity(1.0) }
-        }
-
-        ContextRow {
-          text: "Glass (80%)"
-          checked: root ? (root.dockOpacity >= 0.75 && root.dockOpacity < 0.95) : false
-          onTriggered: { if (root) root.setDockOpacity(0.80) }
-        }
-
-        ContextRow {
-          text: "Frosted Glass (65%)"
-          checked: root ? (root.dockOpacity >= 0.55 && root.dockOpacity < 0.75) : false
-          onTriggered: { if (root) root.setDockOpacity(0.65) }
-        }
-
-        ContextRow {
-          text: "Translucent (35%)"
-          checked: root ? (root.dockOpacity >= 0.20 && root.dockOpacity < 0.55) : false
-          onTriggered: { if (root) root.setDockOpacity(0.35) }
-        }
-
-        ContextRow {
-          text: "Transparent (0%)"
-          checked: root ? (root.dockOpacity >= 0.0 && root.dockOpacity < 0.20) : false
-          onTriggered: { if (root) root.setDockOpacity(0.0) }
-        }
-      }
-
-      // 11. Icon Size Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "size" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "size_spacing" }
-        }
-
-        ContextRow {
-          text: "Icon Size"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Small (28px)"
-          checked: root ? (root.configuredIconSize === 28) : false
-          onTriggered: { if (root) root.setIconSize(28) }
-        }
-
-        ContextRow {
-          text: "Medium (36px)"
-          checked: root ? (root.configuredIconSize === 36 || (root.configuredIconSize === 0 && root.iconSize === 36)) : true
-          onTriggered: { if (root) root.setIconSize(36) }
-        }
-
-        ContextRow {
-          text: "Large (44px)"
-          checked: root ? (root.configuredIconSize === 44) : false
-          onTriggered: { if (root) root.setIconSize(44) }
-        }
-
-        ContextRow {
-          text: "Extra Large (52px)"
-          checked: root ? (root.configuredIconSize === 52) : false
-          onTriggered: { if (root) root.setIconSize(52) }
-        }
-      }
-
-      // 12. Icon Spacing Submenu Page
-      Column {
-        spacing: Style.space(1)
-        visible: root ? root.settingsSubmenu === "spacing" : false
-
-        ContextRow {
-          text: "‹ Back"
-          textColor: Color.accent
-          onTriggered: { if (root) root.settingsSubmenu = "size_spacing" }
-        }
-
-        ContextRow {
-          text: "Icon Spacing"
-          isHeader: true
-        }
-
-        ContextRow {
-          text: "Compact (2px)"
-          checked: root ? (root.itemSpacing === 2) : false
-          onTriggered: { if (root) root.setItemSpacing(2) }
-        }
-
-        ContextRow {
-          text: "Normal (4px)"
-          checked: root ? (root.itemSpacing === 4) : true
-          onTriggered: { if (root) root.setItemSpacing(4) }
-        }
-
-        ContextRow {
-          text: "Relaxed (8px)"
-          checked: root ? (root.itemSpacing === 8) : false
-          onTriggered: { if (root) root.setItemSpacing(8) }
         }
       }
     }
@@ -1059,12 +127,24 @@ BorderSurface {
     // Folder Context Menu
     Column {
       spacing: Style.space(2)
-      visible: root ? root.contextAppId === "__folder_context__" : false
+      visible: root ? (root.contextAppId === "__folder_context__" && contextMenu.folderPage === "") : false
 
       ContextRow {
         text: (root ? root.contextFolderName : "") || "Folder"
         isHeader: true
       }
+
+      ContextRow {
+        text: "View As: " + (root && root.folderViewFor(root.contextFolderPath) === "grid" ? "Folder" : "Stack") + " ›"
+        onTriggered: contextMenu.folderPage = "view"
+      }
+
+      ContextRow {
+        text: "Sort By: " + (root ? (root.folderSortLabels[root.folderSortFor(root.contextFolderPath)] || "Date Modified") : "Date Modified") + " ›"
+        onTriggered: contextMenu.folderPage = "sort"
+      }
+
+      MenuDivider {}
 
       ContextRow {
         text: "Open in File Manager"
@@ -1094,6 +174,72 @@ BorderSurface {
         onTriggered: {
           if (root) {
             root.toggleFolderPin(root.contextFolderPath, root.contextFolderName, "")
+            root.closeContext()
+          }
+        }
+      }
+    }
+
+    // Folder menu: View As page. Stack lists entries; Folder shows a grid
+    // of larger icons with previews.
+    Column {
+      spacing: Style.space(2)
+      visible: root ? (root.contextAppId === "__folder_context__" && contextMenu.folderPage === "view") : false
+
+      ContextRow {
+        text: "‹ Back"
+        textColor: Color.accent
+        onTriggered: contextMenu.folderPage = ""
+      }
+
+      ContextRow {
+        text: "View As"
+        isHeader: true
+      }
+
+      Repeater {
+        model: [
+          { value: "stack", label: "Stack" },
+          { value: "grid", label: "Folder" }
+        ]
+        delegate: ContextRow {
+          required property var modelData
+          text: modelData.label
+          checked: root ? root.folderViewFor(root.contextFolderPath) === modelData.value : false
+          onTriggered: {
+            if (!root) return
+            root.setFolderView(root.contextFolderPath, modelData.value)
+            root.closeContext()
+          }
+        }
+      }
+    }
+
+    // Folder menu: Sort By page
+    Column {
+      spacing: Style.space(2)
+      visible: root ? (root.contextAppId === "__folder_context__" && contextMenu.folderPage === "sort") : false
+
+      ContextRow {
+        text: "‹ Back"
+        textColor: Color.accent
+        onTriggered: contextMenu.folderPage = ""
+      }
+
+      ContextRow {
+        text: "Sort By"
+        isHeader: true
+      }
+
+      Repeater {
+        model: ["name", "kind", "modified", "added", "size"]
+        delegate: ContextRow {
+          required property string modelData
+          text: root ? root.folderSortLabels[modelData] : modelData
+          checked: root ? root.folderSortFor(root.contextFolderPath) === modelData : false
+          onTriggered: {
+            if (!root) return
+            root.setFolderSort(root.contextFolderPath, modelData)
             root.closeContext()
           }
         }
@@ -1275,6 +421,120 @@ BorderSurface {
 
         property int selectedWindowIdx: -1
 
+        // 0. Now Playing: media controls for apps that expose an MPRIS
+        // player (Spotify and the like, or a browser playing a video), as
+        // the macOS dock does. The buttons leave the menu open, so several
+        // tracks can be skipped in a row.
+        Column {
+          id: mediaSection
+          readonly property var player: root ? root.contextPlayer : null
+          spacing: Style.space(2)
+          visible: player !== null
+          width: parent.width
+
+          // No window but a live player: the app runs in the background
+          // (closed to the tray), which the dock shows as a faint dot.
+          ContextRow {
+            text: (root && root.contextWindows === 0) ? "Now Playing · in background" : "Now Playing"
+            isHeader: true
+          }
+
+          Item {
+            readonly property bool isMenuContent: true
+            readonly property string title: mediaSection.player ? (mediaSection.player.trackTitle || mediaSection.player.identity || "") : ""
+            readonly property string artist: mediaSection.player ? (mediaSection.player.trackArtist || "") : ""
+            implicitWidth: Math.min(Style.space(260), Math.max(titleLabel.implicitWidth, artistLabel.implicitWidth) + Style.space(16))
+            implicitHeight: trackColumn.implicitHeight + Style.space(4)
+            width: parent.width
+            height: implicitHeight
+
+            Column {
+              id: trackColumn
+              x: Style.space(8)
+              width: parent.width - Style.space(16)
+              spacing: Style.space(1)
+
+              Text {
+                id: titleLabel
+                width: parent.width
+                text: parent.parent.title
+                textFormat: Text.PlainText
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: true
+                elide: Text.ElideRight
+              }
+              Text {
+                id: artistLabel
+                visible: text !== ""
+                width: parent.width
+                text: parent.parent.artist
+                textFormat: Text.PlainText
+                color: Util.alpha(Color.menu.text, 0.6)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
+            }
+          }
+
+          Row {
+            id: mediaButtons
+            readonly property bool isMenuContent: true
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Style.space(6)
+
+            Repeater {
+              model: [
+                { id: "previous", glyph: "󰒮", label: "Previous" },
+                { id: "toggle", glyph: "", label: "Play / Pause" },
+                { id: "next", glyph: "󰒭", label: "Next" }
+              ]
+              delegate: Rectangle {
+                id: mediaButton
+                required property var modelData
+                readonly property var player: mediaSection.player
+                readonly property bool enabledAction: !player ? false
+                  : modelData.id === "previous" ? player.canGoPrevious
+                  : modelData.id === "next" ? player.canGoNext
+                  : player.canTogglePlaying
+                width: Style.space(34)
+                height: Style.space(28)
+                radius: Style.cornerRadius > 0 ? Style.space(6) : 0
+                color: mediaMouse.containsMouse && enabledAction ? Color.menu.selectedBackground : "transparent"
+                opacity: enabledAction ? 1 : 0.35
+
+                Text {
+                  anchors.centerIn: parent
+                  text: mediaButton.modelData.id === "toggle"
+                    ? (mediaButton.player && mediaButton.player.isPlaying ? "󰏤" : "󰐊")
+                    : mediaButton.modelData.glyph
+                  color: mediaButton.modelData.id === "toggle" ? Color.accent : Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.iconLarge
+                }
+
+                MouseArea {
+                  id: mediaMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: mediaButton.enabledAction ? Qt.PointingHandCursor : Qt.ArrowCursor
+                  onClicked: {
+                    var p = mediaButton.player
+                    if (!p || !mediaButton.enabledAction) return
+                    if (mediaButton.modelData.id === "previous") p.previous()
+                    else if (mediaButton.modelData.id === "next") p.next()
+                    else p.togglePlaying()
+                  }
+                }
+              }
+            }
+          }
+
+          MenuDivider {}
+        }
+
         // 1. Multi-window / Active Window instance list
         Column {
           id: windowListSection
@@ -1336,10 +596,12 @@ BorderSurface {
           MenuDivider {}
         }
 
-        // Fallback Default Action Row when no custom desktop actions exist
+        // Fallback Default Action Row when no custom desktop actions exist.
+        // A running media app gets playback controls above instead of a
+        // second window it rarely supports.
         ContextRow {
           text: (root && root.contextWindows > 0) ? "New Window" : "Launch"
-          visible: root ? (root.contextDesktopActions.length === 0) : true
+          visible: root ? (root.contextDesktopActions.length === 0 && !(root.contextWindows > 0 && mediaSection.player !== null)) : true
           onTriggered: {
             if (root) {
               root.launchApp(root.contextAppId, null)

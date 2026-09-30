@@ -55,11 +55,13 @@ Item {
   }
 
   readonly property bool isDropTarget: (root && root.dropTargetAppId === item.appId && root.dragAppId !== item.appId)
+  // Files from outside hover this icon and the app can open them.
+  readonly property bool isFileDropTarget: root ? (root.appDropTargetId === item.appId && root.appDropState === "yes") : false
   property real magnifyScale: {
     if (!root) return 1
     if (root.waveHover) return root.magnifyScaleAt(item.homeCenter)
     if (root.hoverEffect === "off") return 1
-    return (area.containsMouse && !item.isDragging) ? root.zoomPeak : 1
+    return ((area.containsMouse && !item.isDragging) || item.isFileDropTarget) ? root.zoomPeak : 1
   }
 
   Behavior on magnifyScale {
@@ -147,7 +149,6 @@ Item {
   Item {
     id: iconBox
     anchors.fill: parent
-    anchors.bottomMargin: item.running ? Style.space(5) : 0
 
     scale: area.pressed ? 0.92 : 1.0
     transformOrigin: Item.Bottom
@@ -157,9 +158,9 @@ Item {
       y: item.bounceY
     }
 
-    // Drop target halo for creating an App Folder
+    // Drop target halo: creating an App Folder, or files the app can open
     Rectangle {
-      visible: item.isDropTarget
+      visible: item.isDropTarget || item.isFileDropTarget
       anchors.centerIn: iconImg
       width: (root ? root.baseIconArt : 32) * item.magnifyScale + Style.space(8)
       height: width
@@ -169,7 +170,7 @@ Item {
       border.width: 1.5
       z: -1
       SequentialAnimation on opacity {
-        running: item.isDropTarget
+        running: item.isDropTarget || item.isFileDropTarget
         loops: Animation.Infinite
         NumberAnimation { from: 0.5; to: 1.0; duration: 350; easing.type: Easing.InOutQuad }
         NumberAnimation { from: 1.0; to: 0.5; duration: 350; easing.type: Easing.InOutQuad }
@@ -178,11 +179,11 @@ Item {
 
     // Sits on the dock floor and grows upward, so a magnified icon never
     // reaches down over the running dot beneath it.
-    Image {
+    DockIconArt {
       id: iconImg
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: Math.round((iconBox.height - (root ? root.baseIconArt : 32)) / 2)
+      anchors.bottomMargin: root ? root.iconArtBottom : 0
       width: (root ? root.baseIconArt : 32) * item.magnifyScale
       height: width
       source: {
@@ -190,11 +191,17 @@ Item {
         if (item.icon !== "") return item.icon
         return Quickshell.iconPath("application-x-executable", true)
       }
-      sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
-      visible: source !== ""
+      visible: String(source) !== ""
+      renderSize: root ? root.maxIconArt : 64
       opacity: item.starting ? (0.4 + 0.6 * item.pulse) : 1.0
-      mipmap: true
-      smooth: true
+      iconStyle: root ? root.iconStyle : "original"
+      tint: root ? root.iconTintColor : Color.bar.text
+      grid: root ? root.iconGrid : 16
+      contrast: root ? root.iconContrast : 0
+      strength: root ? root.iconStrength : 1
+      dropShadow: root ? root.iconShadow : false
+      shadowStrength: root ? root.shadowStrength : 0.4
+      showOriginal: root ? (root.iconHoverOriginal && area.containsMouse) : false
     }
   }
 
@@ -226,6 +233,19 @@ Item {
   readonly property real dynamicActiveWidth: totalWindowCount >= 5 ? Style.space(9) : Style.space(12)
   readonly property real dynamicSpacing: totalWindowCount >= 5 ? Style.space(2) : Style.space(3)
 
+  // An app with no window whose media player is still up (closed to the
+  // tray, playing in the background): a faint dot instead of none.
+  readonly property bool backgroundMedia: !item.running && root ? root.mediaPlayerFor(item.appId) !== null : false
+
+  DockIndicator {
+    rootRef: item.rootRef
+    visible: item.backgroundMedia
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+    anchors.bottomMargin: Style.space(1)
+    kind: "background"
+  }
+
   // Fixed at the slot bottom, never scaled or pushed out of the dock.
   Row {
     id: indicatorRow
@@ -238,38 +258,18 @@ Item {
 
     Repeater {
       model: item.maxVisibleDots
-      delegate: Rectangle {
+      // Active window: accent bar; open window: dot; minimized: hollow dot.
+      delegate: DockIndicator {
         readonly property var winObj: (item.windowList && item.windowList.length > index) ? item.windowList[index] : null
         readonly property bool winMinimized: winObj ? item.isWinMinimized(winObj) : item.minimized
         readonly property bool winActive: !winMinimized && ((winObj && winObj.address) ? item.isWinActive(winObj) : (index === 0 && item.isFocused))
 
-        width: winActive ? item.dynamicActiveWidth : item.dynamicDotSize
-        height: winActive ? Style.space(4) : item.dynamicDotSize
-        radius: height / 2
+        rootRef: item.rootRef
         anchors.verticalCenter: parent.verticalCenter
-
-        // 1. Active window: Solid illuminated bar
-        // 2. Open visible window: Solid circle
-        // 3. Minimized window: Hollow circle (transparent fill with solid border)
-        color: winActive
-          ? Color.accent
-          : (winMinimized
-              ? "transparent"
-              : (item.urgent ? Color.urgent : Util.alpha(root ? root.dockForeground : Color.bar.text, 0.88)))
-
-        border.color: winActive
-          ? Qt.rgba(0, 0, 0, 0.45)
-          : (winMinimized
-              ? (item.urgent ? Color.urgent : Util.alpha(root ? root.dockForeground : Color.bar.text, 0.88))
-              : Qt.rgba(0, 0, 0, 0.45))
-
-        border.width: winMinimized ? 1.5 : 1
-
-        opacity: item.urgent ? (0.4 + 0.6 * item.pulse) : 1.0
-
-        Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
+        kind: winActive ? "active" : (winMinimized ? "minimized" : "window")
+        dense: item.totalWindowCount >= 5
+        urgent: item.urgent
+        pulse: item.pulse
       }
     }
 
@@ -278,7 +278,7 @@ Item {
       visible: item.totalWindowCount > 5
       width: overflowText.implicitWidth + Style.space(4)
       height: Style.space(5)
-      radius: height / 2
+      radius: (root && root.indicatorSquare) ? 0 : height / 2
       anchors.verticalCenter: parent.verticalCenter
       color: Util.alpha(root ? root.dockForeground : Color.bar.text, 0.20)
       border.color: Qt.rgba(0, 0, 0, 0.35)
@@ -294,6 +294,26 @@ Item {
         font.pixelSize: Math.max(7, Style.font.caption - 4)
         font.bold: true
       }
+    }
+  }
+
+  // Files dragged in from outside: opened with this app when it declares
+  // their types (see Dock.beginAppDrop). Refusing the drag lets a folder
+  // fall through to the dock's own drop area, which pins it.
+  DropArea {
+    anchors.fill: parent
+    keys: ["text/uri-list"]
+    onEntered: function(drag) {
+      if (root) root.beginAppDrop(item.appId, drag.urls)
+      drag.accept(Qt.CopyAction)
+    }
+    onPositionChanged: function(drag) {
+      drag.accepted = !root || root.appDropState !== "no"
+    }
+    onExited: if (root) root.endAppDrop(item.appId)
+    onDropped: function(drop) {
+      if (root && root.dropOnApp(item.appId)) drop.accept(Qt.CopyAction)
+      else drop.accepted = false
     }
   }
 
