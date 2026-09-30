@@ -1317,12 +1317,16 @@ Item {
 
   // ------------------------------------------------- file views
   //
-  // Watched files feed the long-lived shell process, so every read is gated by
-  // a byte ceiling (DockModel.readCapped) before it can reach JSON.parse or
-  // dock state, and reload cycles are debounced (fileChanged only fires from
-  // the filesystem watcher, never from our own atomic writes — the debounce
-  // coalesces rapid external edit bursts and the _savingConfig guard keeps the
-  // read after a save from re-applying stale data).
+  // Watched files feed the long-lived shell process, so the byte ceiling and
+  // the regular-file gate apply BEFORE any content is loaded into QML: every
+  // watched path goes through CappedFileView, which keeps FileView as a change
+  // watcher only and reads content through a stat-then-read gate bounded by
+  // DockModel.MAX_*_BYTES (a large file or FIFO can never enter or stall the
+  // shell at the read boundary). DockModel.readCapped stays as defense in
+  // depth on the accepted slice. Reload cycles are debounced (fileChanged only
+  // fires from the filesystem watcher, never from our own atomic writes — the
+  // debounce coalesces rapid external edit bursts and the _savingConfig guard
+  // keeps the read after a save from re-applying stale data).
 
   // Coalesces rapid external change bursts into one reload per file.
   Timer {
@@ -1346,9 +1350,10 @@ Item {
     }
   }
 
-  FileView {
+  CappedFileView {
     id: configFile
     path: root.configPath
+    maxBytes: DockModel.MAX_CONFIG_BYTES
     watchChanges: true
     atomicWrites: true
     onLoaded: {
@@ -1362,20 +1367,21 @@ Item {
     }
   }
 
-  FileView {
+  CappedFileView {
     id: dockFile
     path: root.dockPath
+    maxBytes: DockModel.MAX_DOCK_JSON_BYTES
     watchChanges: true
     atomicWrites: true
     onLoaded: root.loadPinned()
     onFileChanged: dockReloadDebounce.restart()
   }
 
-  FileView {
+  CappedFileView {
     id: themeIconsFile
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/icons.theme"
+    maxBytes: DockModel.MAX_ICONS_THEME_BYTES
     watchChanges: true
-    printErrors: false
     onLoaded: root.handleThemeChanged()
     onFileChanged: {
       themeIconsFile.reload()
@@ -1383,9 +1389,10 @@ Item {
     }
   }
 
-  FileView {
+  CappedFileView {
     id: themeColorsFile
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    maxBytes: DockModel.MAX_COLORS_TOML_BYTES
     watchChanges: true
     onLoaded: root.handleThemeChanged()
     onFileChanged: {
@@ -1394,11 +1401,11 @@ Item {
     }
   }
 
-  FileView {
+  CappedFileView {
     id: dndConfigFile
     path: Quickshell.env("HOME") + "/.local/state/omarchy/notifications.json"
+    maxBytes: DockModel.MAX_NOTIFICATIONS_BYTES
     watchChanges: true
-    printErrors: false
     onFileChanged: dndConfigFile.reload()
   }
 
@@ -1407,7 +1414,7 @@ Item {
       return root.notifService.doNotDisturb
     }
     try {
-      var txt = DockModel.readCapped(dndConfigFile.text(), DockModel.MAX_NOTIFICATIONS_BYTES).trim()
+      var txt = DockModel.readCapped(dndConfigFile.text, DockModel.MAX_NOTIFICATIONS_BYTES).trim()
       if (txt) {
         var parsed = JSON.parse(txt)
         if (parsed && typeof parsed.dnd === "boolean") return parsed.dnd
@@ -1697,11 +1704,11 @@ Item {
   // ------------------------------------------------- functions
 
   function loadPinned() {
-    root.pinnedIds = DockModel.parsePinned(DockModel.readCapped(dockFile.text(), DockModel.MAX_DOCK_JSON_BYTES))
+    root.pinnedIds = DockModel.parsePinned(DockModel.readCapped(dockFile.text, DockModel.MAX_DOCK_JSON_BYTES))
   }
 
   function loadConfig() {
-    var raw = DockModel.readCapped(configFile.text(), DockModel.MAX_CONFIG_BYTES).trim()
+    var raw = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
     var parsed = {}
     if (raw) {
       try {
@@ -1789,7 +1796,7 @@ Item {
 
   function handleThemeChanged() {
     try {
-      var t = DockModel.readCapped(themeIconsFile.text(), DockModel.MAX_ICONS_THEME_BYTES).trim()
+      var t = DockModel.readCapped(themeIconsFile.text, DockModel.MAX_ICONS_THEME_BYTES).trim()
       if (t) root.currentIconThemeName = t
     } catch (e) {}
     root.themeVersion++
@@ -2666,7 +2673,7 @@ Item {
   function saveConfig() {
     var conf = {}
     try {
-      var txt = DockModel.readCapped(configFile.text(), DockModel.MAX_CONFIG_BYTES).trim()
+      var txt = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
       if (txt) conf = JSON.parse(txt) || {}
     } catch (e) {
       conf = {}

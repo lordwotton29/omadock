@@ -4,7 +4,7 @@
 
 ### *A modern, fluid, zero-CPU application dock engineered for Omarchy Linux*
 
-[![Release](https://img.shields.io/badge/release-v3.7.1-6c7086?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1e2e)](https://github.com/thepathless/omadock/releases)
+[![Release](https://img.shields.io/github/v/release/thepathless/omadock?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1e2e&color=6c7086)](https://github.com/thepathless/omadock/releases)
 [![Omarchy](https://img.shields.io/badge/omarchy-4.0.3+-cba6f7?style=for-the-badge&logo=archlinux&logoColor=white&labelColor=1e1e2e)](https://omarchy.org)
 [![Hyprland](https://img.shields.io/badge/compositor-Hyprland-89b4fa?style=for-the-badge&logo=wayland&logoColor=white&labelColor=1e1e2e)](https://hyprland.org)
 [![Quickshell](https://img.shields.io/badge/shell-Quickshell_Qt6-a6e3a1?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1e2e)](https://quickshell.org)
@@ -25,7 +25,7 @@
   <a href="#%EF%B8%8F-configuration-reference"><b>Configuration</b></a> •
   <a href="#-keyboard-shortcuts-via-ipc"><b>Keybindings</b></a> •
   <a href="#-faq"><b>FAQ</b></a> •
-  <a href="https://github.com/sponsors/thepathless"><b>Sponsor ❤️</b></a>
+  <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/Sponsor_%E2%9D%A4%EF%B8%8F-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor ❤️" height="28" /></a>
 </p>
 
 </div>
@@ -37,6 +37,10 @@
 Omadock is built by one person — **suva ([@thepathless](https://github.com/thepathless))**, a medical student in India who codes between classes and clinics. It's free, and it always will be — but building it costs money I don't quite have: monthly AI coding tokens, and a laptop that's falling apart (dead WiFi, sticky keys, a trackpad with a mind of its own) — so I'm saving for a **[Dell XPS 13 (2026)](https://www.dell.com/en-us/blog/year-of-the-linux-laptop-omarchy-on-xps/)**.
 
 If Omadock earns a place on your desktop, [**sponsoring me**](https://github.com/sponsors/thepathless) keeps the AI lights on and the laptop fund growing. Every supporter is honored on the [**supporters wall**](SPONSORS.md) 💝 — with love, no tiers, no perks.
+
+<p align="center">
+  <a href="https://github.com/sponsors/thepathless"><img src="https://img.shields.io/badge/Sponsor_%E2%9D%A4%EF%B8%8F-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor ❤️ on GitHub" /></a>
+</p>
 
 ### 💻 Laptop fund
 
@@ -427,7 +431,7 @@ Run <code>omarchy restart shell</code> in your terminal to instantly reload the 
 ## 🛠️ Diagnostics & Validation
 
 ```bash
-# Validate manifest compliance against Omarchy 4.0.1+ standards
+# Validate manifest compliance against Omarchy 4.0.3+ standards
 omarchy plugin validate ~/Projects/omadock
 
 # Inspect live compositor journal logs
@@ -450,6 +454,12 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 ## 📋 Version Changes & Bug Fixes
 
 A running changelog of user-facing changes. Full detail lives in the [commit history](https://github.com/thepathless/omadock/commits/main).
+
+### Unreleased — 2026-09-29
+- **Security (marketplace review [#6544](https://github.com/omacom/omarchy-plugin-marketplace/issues/6544)):** the byte cap and regular-file gate now apply **before** any watched file content loads into QML — `FileView` is a change-watcher only and content is read through a stat-then-read gate bounded by per-file byte ceilings, so a large file or FIFO can never enter or stall the shell at the file-read boundary.
+- **Feature:** the full **settings panel** ([9f9b3fb](https://github.com/thepathless/omadock/commit/9f9b3fb), [9f465d0](https://github.com/thepathless/omadock/commit/9f465d0)) — right-click the Omarchy logo or empty dock space for a sidebar (*Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders*, *App Groups*) with live-applying switches, sliders and dropdowns, plus **border opacity** control and **Supporters/About** pages. Also openable from a keybind: `omarchy-shell omadock openSettings`.
+- **Tooling ([53c439a](https://github.com/thepathless/omadock/commit/53c439a)):** load-time smoke test (`tests/smoke-test.sh`) — asserts the dock actually instantiates in the live shell (overlay layer mapped, IPC target registered, clean logs).
+- **Release ([ddd1c4f](https://github.com/thepathless/omadock/commit/ddd1c4f)):** merged `pr-12` into `main` (settings panel, border opacity, load-time smoke test), verified on the live desktop.
 
 ### v3.8.0 — 2026-09-28
 - **Feature ([#11](https://github.com/thepathless/omadock/pull/11), contributed by [@G-Pappas](https://github.com/G-Pappas)):** opt-in **multi-monitor mode** — one dock per connected monitor, each listing only the windows on that monitor (like the Windows taskbar on every display). Pinned apps appear on every dock, minimized tiles follow their origin monitor, monitors are hotplug-aware, and keybinds act on the focused monitor's dock first. Enable via *Settings → Placement & Alignment → Show on All Monitors* or `"multiMonitor": true`. **Off by default** — single-dock behavior is unchanged.
