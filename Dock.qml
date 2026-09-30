@@ -780,7 +780,7 @@ Item {
   readonly property var themeGradientColors: {
     var _tv = root.themeVersion
     var text = ""
-    try { text = DockModel.readCapped(themeColorsFile.text(), DockModel.MAX_COLORS_TOML_BYTES) } catch (e) {}
+    try { text = DockModel.readCapped(themeColorsFile.text, DockModel.MAX_COLORS_TOML_BYTES) } catch (e) {}
     var named = {}
     var re = /^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6})"/gm
     var m
