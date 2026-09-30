@@ -56,6 +56,7 @@ PanelWindow {
     topPadding: Style.spacing.xxl
     bottomPadding: Style.spacing.sm
     text: ""
+    textFormat: Text.PlainText
     color: Util.alpha(Color.menu.text, 0.55)
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -81,9 +82,12 @@ PanelWindow {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.spacing.xxs
 
+      // Folder names, group names and paths reach these two unwrapped: they
+      // are always plain text, never markup.
       Text {
         width: parent.width
         text: settingRow.label
+        textFormat: Text.PlainText
         color: Color.menu.text
         font.family: Style.font.family
         font.pixelSize: Style.font.subtitle
@@ -93,6 +97,7 @@ PanelWindow {
         width: parent.width
         visible: settingRow.hint !== ""
         text: settingRow.hint
+        textFormat: Text.PlainText
         color: Util.alpha(Color.menu.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -191,6 +196,7 @@ PanelWindow {
         width: Style.space(52)
         horizontalAlignment: Text.AlignRight
         text: Math.round(slider.liveValue * sliderRow.displayScale) + sliderRow.suffix
+        textFormat: Text.PlainText
         color: Util.alpha(Color.menu.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.body
@@ -352,6 +358,7 @@ PanelWindow {
               Text {
                 id: navGlyph
                 text: navItem.modelData.glyph
+                textFormat: Text.PlainText
                 color: navItem.current ? Color.accent : Util.alpha(Color.menu.text, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.iconLarge
@@ -365,6 +372,7 @@ PanelWindow {
               anchors.leftMargin: Style.spacing.lg
               anchors.verticalCenter: parent.verticalCenter
               text: navItem.modelData.label
+              textFormat: Text.PlainText
               color: navItem.current ? Color.accent : Color.menu.text
               font.family: Style.font.family
               font.pixelSize: Style.font.subtitle
@@ -402,6 +410,7 @@ PanelWindow {
             if (panel.pages[i].id === panel.page) return panel.pages[i].label
           return ""
         }
+        textFormat: Text.PlainText
         color: Color.menu.text
         font.family: Style.font.family
         font.pixelSize: Style.font.display
@@ -574,6 +583,24 @@ PanelWindow {
               }
             }
           }
+
+          SectionLabel { text: "Dock Items" }
+
+          SwitchRow {
+            label: "Omarchy button"
+            hint: "The launcher at the start of the dock. Without it, right-click the dock background to reach these settings."
+            checked: root ? root.showAppsButton : true
+            onToggled: root.setOption("showAppsButton", !root.showAppsButton)
+          }
+          SwitchRow {
+            label: "Removable drives"
+            hint: "Show mounted USB drives at the end of the dock."
+            checked: root ? root.showRemovableDrives : true
+            onToggled: {
+              root.setOption("showRemovableDrives", !root.showRemovableDrives)
+              root.scanRemovableDrives()
+            }
+          }
         }
 
         // ================================================= Placement
@@ -712,33 +739,8 @@ PanelWindow {
               onChanged: function(v) { root.setUrgentSoundName(v) }
             }
           }
-        }
 
-        // ================================================= Effects
-        Column {
-          width: parent.width
-          visible: panel.page === "effects"
-
-          SectionLabel { text: "Motion" }
-
-          ChoiceRow {
-            label: "Hover effect"
-            options: [
-              { value: "zoom", label: "Zoom" },
-              { value: "wave", label: "Wave" },
-              { value: "off", label: "None" }
-            ]
-            value: root ? root.hoverEffect : "zoom"
-            onPicked: function(v) { root.setHoverEffect(v) }
-          }
-          SwitchRow {
-            label: "Launch bounce"
-            hint: "Bounce the icon while an app is starting."
-            checked: root ? root.launchBounce : true
-            onToggled: root.setOption("launchBounce", !root.launchBounce)
-          }
-
-          SectionLabel { text: "Tooltips & previews" }
+          SectionLabel { text: "Previews & Tooltips" }
 
           SwitchRow {
             label: "Tooltips"
@@ -770,6 +772,31 @@ PanelWindow {
           }
         }
 
+        // ================================================= Effects
+        Column {
+          width: parent.width
+          visible: panel.page === "effects"
+
+          SectionLabel { text: "Motion" }
+
+          ChoiceRow {
+            label: "Hover effect"
+            options: [
+              { value: "zoom", label: "Zoom" },
+              { value: "wave", label: "Wave" },
+              { value: "off", label: "None" }
+            ]
+            value: root ? root.hoverEffect : "zoom"
+            onPicked: function(v) { root.setHoverEffect(v) }
+          }
+          SwitchRow {
+            label: "Launch bounce"
+            hint: "Bounce the icon while an app is starting."
+            checked: root ? root.launchBounce : true
+            onToggled: root.setOption("launchBounce", !root.launchBounce)
+          }
+        }
+
         // ================================================= Size & spacing
         Column {
           width: parent.width
@@ -795,15 +822,6 @@ PanelWindow {
             suffix: " px"
             value: root ? root.itemSpacing : 4
             onCommitted: function(v) { root.setItemSpacing(Math.round(v)) }
-          }
-
-          SectionLabel { text: "Items" }
-
-          SwitchRow {
-            label: "Omarchy button"
-            hint: "The launcher at the start of the dock. Without it, right-click the dock background to reach these settings."
-            checked: root ? root.showAppsButton : true
-            onToggled: root.setOption("showAppsButton", !root.showAppsButton)
           }
         }
 
@@ -907,18 +925,6 @@ PanelWindow {
                 selected: root ? root.folderColor === modelData.id : false
                 onPicked: root.setFolderColor(modelData.id)
               }
-            }
-          }
-
-          SectionLabel { text: "Devices" }
-
-          SwitchRow {
-            label: "Removable drives"
-            hint: "Show mounted USB drives at the end of the dock."
-            checked: root ? root.showRemovableDrives : true
-            onToggled: {
-              root.setOption("showRemovableDrives", !root.showRemovableDrives)
-              root.scanRemovableDrives()
             }
           }
         }
