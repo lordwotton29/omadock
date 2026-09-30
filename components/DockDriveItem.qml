@@ -55,36 +55,35 @@ Item {
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
 
-    Image {
+    DockIconArt {
       id: driveIconImg
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: Math.round((iconSlot.height - (root ? root.baseIconArt : 32)) / 2)
+      anchors.bottomMargin: root ? root.iconArtBottom : 0
       width: (root ? root.baseIconArt : 32) * ditem.magnifyScale
       height: width
       source: ditem.resolvedSource
-      sourceSize: Qt.size(
-        Math.max(32, Math.round((root ? root.iconSize : 36) * 4)),
-        Math.max(32, Math.round((root ? root.iconSize : 36) * 4))
-      )
-      fillMode: Image.PreserveAspectFit
-      asynchronous: true
-      smooth: true
-      mipmap: true
-      visible: source !== ""
+      renderSize: root ? root.maxIconArt : 64
+      visible: String(source) !== ""
+      iconStyle: root ? root.iconStyle : "original"
+      tint: root ? root.iconTintColor : Color.bar.text
+      grid: root ? root.iconGrid : 16
+      contrast: root ? root.iconContrast : 0
+      strength: root ? root.iconStrength : 1
+      dropShadow: root ? root.iconShadow : false
+      shadowStrength: root ? root.shadowStrength : 0.4
+      showOriginal: root ? (root.iconHoverOriginal && driveArea.containsMouse) : false
     }
   }
 
-  // Active stack open indicator dot
-  Rectangle {
+  // Open stack: the same accent bar an app with focus shows.
+  DockIndicator {
+    rootRef: ditem.rootRef
     visible: ditem.isOpen
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Style.space(1)
     anchors.horizontalCenter: parent.horizontalCenter
-    width: Style.space(4)
-    height: Style.space(4)
-    radius: width / 2
-    color: Color.accent
+    kind: "active"
   }
 
   MouseArea {

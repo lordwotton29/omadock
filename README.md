@@ -158,9 +158,14 @@ $$\text{scale}(d) = 1 + (\text{peak} - 1) \cdot \frac{1 + \cos\left(\frac{\pi \c
 
 Pin directories like `~/Downloads`, `~/Projects`, or custom paths directly to your dock:
 
-- **Recent files popover** — up to 16 newest files with icons, sizes, and relative times.
-- **Direct opening** — click any file (`xdg-open`) or jump to its folder.
-- **GTK folder dialog** — attach custom folders from Settings.
+- **Files popover** — up to 300 entries with icons, sizes, and relative times.
+- **View As** — right-click the folder: *Stack* (a list) or *Folder* (a grid of larger icons, with previews for images and for anything your file manager has already thumbnailed), saved per folder.
+- **Browse** — click a subfolder to step into it, **‹** to go back; long folders scroll.
+- **Sort By** — right-click the folder: Name, Kind, Date Modified, Date Added or Size, saved per folder.
+- **Direct opening** — click any file to open it in its default app (`xdg-open`), or jump to its folder.
+- **Drag out** — drag a file from the popover into a file manager, browser or chat app.
+- **Drop in** — rest a folder from your file manager over the folder section of the dock for a moment, then drop it to pin it (dropping on an app icon opens it with that app instead).
+- **Folder picker** — attach custom folders from Settings through the desktop's file chooser (`omarchy-file-select` / XDG portal).
 
 ---
 
@@ -206,6 +211,8 @@ Enable **Settings → Placement & Alignment → Show on All Monitors** (or `"mul
 Deep Linux desktop and compositor integration:
 
 - **FreeDesktop jump lists** — native quick actions straight from `.desktop` files.
+- **Drop files on apps** — drag files (or a folder) onto an app icon to open them with it; the icon lights up only when the app declares their types (`MimeType=` in its desktop entry).
+- **Media controls** — right-click an app that plays media (Spotify, a browser playing a video…) for *Now Playing* with previous / play-pause / next, through MPRIS.
 - **Intelligent autohide** — 2D AABB overlap tests on Hyprland events only. **0.00% CPU**, always.
 
 ---
@@ -309,6 +316,7 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
   "showShadow": true,
   "showBorder": true,
   "borderOpacity": "theme",
+  "groupStyle": "rounded",
   "itemSpacing": 4,
   "iconSize": 0,
   "hoverEffect": "zoom",
@@ -346,14 +354,31 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
 | `intelligentAutohide` | `bool` | `true` | Hides dock only when windows overlap its bounding box (AABB). |
 | `showRemovableDrives` | `bool` | `true` | Auto-detect and display removable USB thumb drives and storage. |
 | `appGroups` | `array` | `[]` | App Folders / Groups configuration (name, custom icon, app ID list). |
+| `groupStyle` | `string` | `"rounded"` | Group tile frame: `"rounded"` (softly rounded rim), `"square"` (rim without rounding) or `"none"` (icons only). |
+| `groupIconEffects` | `string` | `"theme"` | Icons in an opened group: `"theme"` follows `iconStyle`, `"none"` keeps them original. The tile on the dock always follows `iconStyle`. |
 | `minimizeMode` | `string` | `"active"` | `"active"` (FIFO single), `"all"` (batch group), `"off"` (disabled). |
 | `showMinimizedTiles` | `bool` | `true` | Displays live screencopy preview tiles for parked windows. |
 | `opacity` | `number \| str` | `1.0` | Background opacity: `"theme"`, `1.0`, `0.80`, `0.65`, `0.35`, `0.0`. |
 | `shape` | `string` | `"rounded"` | Dock geometry: `"rounded"`, `"round"` (pill), `"square"`, `"theme"`. |
+| `indicatorShape` | `string` | `"theme"` | Dots and bars under icons: `"theme"` (follows `shape`), `"rounded"` or `"square"`. |
 | `bgColor` | `string` | `"theme"` | `"theme"`, `"none"`, or custom hex string (`"#1e1e2e"`). |
 | `showBackground` | `bool` | `true` | Draws the dock's background fill. `false` leaves the icons floating. |
 | `showShadow` | `bool` | `true` | Draws the soft drop shadow under the dock. |
 | `showBorder` | `bool` | `true` | Draws the rim around the dock. |
+| `borderWidth` | `number` | `1.5` | Rim width in pixels, `1`–`6`. |
+| `bgFill` | `string` | `"solid"` | Background fill: `"solid"` (`bgColor`) or `"gradient"`. |
+| `gradientPreset` | `string` | `"theme"` | Gradient palette: `"theme"` (accent plus two theme palette colours) or `aurora`, `sunset`, `ocean`, `forest`, `rose`, `lavender`, `ember`, `citrus`, `mono`. |
+| `gradientStrength` | `number` | `0.6` | How strongly the gradient colours cover the theme background, `0`–`1`. |
+| `grain` | `number` | `0` | Film grain over the background, `0` (off) – `1`. |
+| `shadowStrength` | `number` | `0.4` | Shadow opacity, `0.0`–`1.0`. |
+| `blur` | `string` | `"system"` | Blur behind the dock: `"system"` (your Hyprland layer rules decide), `"on"` or `"off"` (a runtime layer rule overrides them). |
+| `blurSize` | `int` | unset | With `blur: "on"`, Hyprland's blur size `1`–`20`. Hyprland has one blur size for everything, so this applies globally; the previous value (`systemBlurSize`, recorded automatically) comes back when blur leaves `"on"`. |
+| `iconStyle` | `string` | `"original"` | `"original"`, `"mono"` (one theme colour, shading kept), `"pixel"` (coarse grid, unsmoothed) or `"dots"` (dithered dot matrix). |
+| `iconTint` | `string` | `"text"` | Colour for `mono` and `dots`: the dock's `"text"` colour, the theme `"accent"`, or `"bw"` (near black or near white, whichever contrasts more with the background). Text and accent are lightened or darkened when they would not stand out from the background. |
+| `iconGrid` | `int` | `16` | Pixels / dots across an icon for `pixel` and `dots` (`8`–`32`). |
+| `iconContrast` | `number` | `0` | `mono` / `dots`: adaptive contrast `0`–`1`, stretched around each icon's own average; high values flatten icons to a simple shape. |
+| `iconStrength` | `number` | `1` | `mono` / `dots`: how much of the effect covers the original icon, `0`–`1`. |
+| `iconHoverOriginal` | `bool` | `false` | With an icon style on, the hovered icon (dock, group tiles, an opened group) shows as shipped. |
 | `folderColor` | `string` | `"theme"` | `"theme"`, `"symbolic"`, `"white"`, `"black"`, `"Yaru-blue"`, etc. |
 | `hoverEffect` | `string` | `"zoom"` | Hover growth mode: `"zoom"`, `"wave"`, or `"off"`. |
 | `revealDelay` | `int` | `160` | Edge dwell time in milliseconds before unhiding ($0$–$2000$). |
