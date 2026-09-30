@@ -66,6 +66,7 @@ PanelWindow {
     topPadding: Style.spacing.xxl
     bottomPadding: Style.spacing.sm
     text: ""
+    textFormat: Text.PlainText
     color: Util.alpha(Color.menu.text, 0.55)
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -91,9 +92,12 @@ PanelWindow {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.spacing.xxs
 
+      // Folder names, group names and paths reach these two unwrapped: they
+      // are always plain text, never markup.
       Text {
         width: parent.width
         text: settingRow.label
+        textFormat: Text.PlainText
         color: Color.menu.text
         font.family: Style.font.family
         font.pixelSize: Style.font.subtitle
@@ -103,6 +107,7 @@ PanelWindow {
         width: parent.width
         visible: settingRow.hint !== ""
         text: settingRow.hint
+        textFormat: Text.PlainText
         color: Util.alpha(Color.menu.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -203,6 +208,7 @@ PanelWindow {
         width: Style.space(52)
         horizontalAlignment: Text.AlignRight
         text: (slider.liveValue * sliderRow.displayScale).toFixed(sliderRow.displayDecimals) + sliderRow.suffix
+        textFormat: Text.PlainText
         color: Util.alpha(Color.menu.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.body
@@ -400,6 +406,7 @@ PanelWindow {
               Text {
                 id: navGlyph
                 text: navItem.modelData.glyph
+                textFormat: Text.PlainText
                 color: navItem.current ? Color.accent : Util.alpha(Color.menu.text, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.iconLarge
@@ -413,6 +420,7 @@ PanelWindow {
               anchors.leftMargin: Style.spacing.lg
               anchors.verticalCenter: parent.verticalCenter
               text: navItem.modelData.label
+              textFormat: Text.PlainText
               color: navItem.current ? Color.accent : Color.menu.text
               font.family: Style.font.family
               font.pixelSize: Style.font.subtitle
@@ -450,6 +458,7 @@ PanelWindow {
             if (panel.pages[i].id === panel.page) return panel.pages[i].label
           return ""
         }
+        textFormat: Text.PlainText
         color: Color.menu.text
         font.family: Style.font.family
         font.pixelSize: Style.font.display
@@ -633,6 +642,7 @@ PanelWindow {
                         width: Style.space(64)
                         horizontalAlignment: Text.AlignHCenter
                         text: paletteTile.modelData.name
+                        textFormat: Text.PlainText
                         color: paletteTile.current ? Color.accent : Util.alpha(Color.menu.text, 0.7)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
@@ -799,6 +809,24 @@ PanelWindow {
               value: root ? root.indicatorShape : "theme"
               onPicked: function(v) { root.setOption("indicatorShape", v) }
             }
+
+            SectionLabel { text: "Dock Items" }
+
+            SwitchRow {
+              label: "Omarchy button"
+              hint: "The launcher at the start of the dock. Without it, right-click the dock background to reach these settings."
+              checked: root ? root.showAppsButton : true
+              onToggled: root.setOption("showAppsButton", !root.showAppsButton)
+            }
+            SwitchRow {
+              label: "Removable drives"
+              hint: "Show mounted USB drives at the end of the dock."
+              checked: root ? root.showRemovableDrives : true
+              onToggled: {
+                root.setOption("showRemovableDrives", !root.showRemovableDrives)
+                root.scanRemovableDrives()
+              }
+            }
           }
 
           // ================================================= Placement
@@ -937,6 +965,37 @@ PanelWindow {
                 onChanged: function(v) { root.setUrgentSoundName(v) }
               }
             }
+
+            SectionLabel { text: "Previews & Tooltips" }
+
+            SwitchRow {
+              label: "Tooltips"
+              checked: root ? root.showTooltips : true
+              onToggled: root.setOption("showTooltips", !root.showTooltips)
+            }
+            SliderRow {
+              label: "Tooltip delay"
+              enabled: root ? root.showTooltips : true
+              opacity: enabled ? 1 : 0.45
+              minimum: 0
+              maximum: 2000
+              step: 50
+              suffix: " ms"
+              value: root ? root.tooltipDelay : 450
+              onCommitted: function(v) { root.setOption("tooltipDelay", Math.round(v)) }
+            }
+            SwitchRow {
+              label: "Window previews"
+              hint: "Live thumbnails of an app's windows in its tooltip."
+              checked: root ? root.advancedTooltips : true
+              onToggled: root.setOption("advancedTooltips", !root.advancedTooltips)
+            }
+            SwitchRow {
+              label: "Minimized window tiles"
+              hint: "Show parked windows as preview tiles in the dock."
+              checked: root ? root.showMinimizedTiles : true
+              onToggled: root.setOption("showMinimizedTiles", !root.showMinimizedTiles)
+            }
           }
 
           // ================================================= Effects
@@ -1029,37 +1088,6 @@ PanelWindow {
               checked: root ? root.launchBounce : true
               onToggled: root.setOption("launchBounce", !root.launchBounce)
             }
-
-            SectionLabel { text: "Tooltips & previews" }
-
-            SwitchRow {
-              label: "Tooltips"
-              checked: root ? root.showTooltips : true
-              onToggled: root.setOption("showTooltips", !root.showTooltips)
-            }
-            SliderRow {
-              label: "Tooltip delay"
-              enabled: root ? root.showTooltips : true
-              opacity: enabled ? 1 : 0.45
-              minimum: 0
-              maximum: 2000
-              step: 50
-              suffix: " ms"
-              value: root ? root.tooltipDelay : 450
-              onCommitted: function(v) { root.setOption("tooltipDelay", Math.round(v)) }
-            }
-            SwitchRow {
-              label: "Window previews"
-              hint: "Live thumbnails of an app's windows in its tooltip."
-              checked: root ? root.advancedTooltips : true
-              onToggled: root.setOption("advancedTooltips", !root.advancedTooltips)
-            }
-            SwitchRow {
-              label: "Minimized window tiles"
-              hint: "Show parked windows as preview tiles in the dock."
-              checked: root ? root.showMinimizedTiles : true
-              onToggled: root.setOption("showMinimizedTiles", !root.showMinimizedTiles)
-            }
           }
 
           // ================================================= Size & spacing
@@ -1087,15 +1115,6 @@ PanelWindow {
               suffix: " px"
               value: root ? root.itemSpacing : 4
               onCommitted: function(v) { root.setItemSpacing(Math.round(v)) }
-            }
-
-            SectionLabel { text: "Items" }
-
-            SwitchRow {
-              label: "Omarchy button"
-              hint: "The launcher at the start of the dock. Without it, right-click the dock background to reach these settings."
-              checked: root ? root.showAppsButton : true
-              onToggled: root.setOption("showAppsButton", !root.showAppsButton)
             }
           }
 
@@ -1201,18 +1220,6 @@ PanelWindow {
                 }
               }
             }
-
-            SectionLabel { text: "Devices" }
-
-            SwitchRow {
-              label: "Removable drives"
-              hint: "Show mounted USB drives at the end of the dock."
-              checked: root ? root.showRemovableDrives : true
-              onToggled: {
-                root.setOption("showRemovableDrives", !root.showRemovableDrives)
-                root.scanRemovableDrives()
-              }
-            }
           }
 
           // ================================================= App groups
@@ -1307,6 +1314,7 @@ PanelWindow {
 
                       Text {
                         text: groupRow.modelData.name || "Group"
+                        textFormat: Text.PlainText
                         color: nameMouse.containsMouse ? Color.accent : Color.menu.text
                         font.family: Style.font.family
                         font.pixelSize: Style.font.subtitle
@@ -1356,6 +1364,7 @@ PanelWindow {
                       var count = groupRow.appCount + (groupRow.appCount === 1 ? " app" : " apps")
                       return names.length > 0 ? count + " · " + names.join(", ") : count
                     }
+                    textFormat: Text.PlainText
                     color: Util.alpha(Color.menu.text, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
@@ -1464,6 +1473,7 @@ PanelWindow {
 
               Text {
                 text: (root && root.manifest && root.manifest.version) ? "v" + root.manifest.version : "unknown"
+                textFormat: Text.PlainText
                 color: Color.menu.text
                 font.family: Style.font.family
                 font.pixelSize: Style.font.subtitle
