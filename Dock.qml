@@ -264,7 +264,9 @@ Item {
       if (id === "") return
       // Always append .desktop — DesktopEntry.id strips the extension, so
       // ids like org.telegram.desktop need it re-added to resolve correctly.
-      var args = ["uwsm-app", "--", "gtk-launch", "--", id + ".desktop"]
+      // Redirect stdout and stderr to /dev/null so spawned applications don't inherit
+      // transient QProcess pipes that close when gtk-launch exits (causing EPIPE crashes).
+      var args = ["bash", "-c", "exec uwsm-app -- gtk-launch -- \"$1\" >/dev/null 2>&1", "_", id + ".desktop"]
       // gtk-launch exits non-zero up front when the desktop file no longer
       // resolves (stale pin, uninstalled app), but execDetached cannot
       // observe exit codes. Launches run through launchProc so failures
