@@ -295,7 +295,9 @@ PanelWindow {
           var opt = JSON.parse(this.text)
           // Newer Hyprland reports booleans as "bool", older ones as "int".
           panel.systemBlurEnabled = typeof opt.bool === "boolean" ? opt.bool : opt.int !== 0
-        } catch (e) {}
+        } catch (e) {
+          console.warn("[omadock] Failed to parse decoration:blur:enabled option:", e)
+        }
       }
     }
   }
@@ -308,7 +310,9 @@ PanelWindow {
         try {
           var opt = JSON.parse(this.text)
           if (typeof opt.int === "number") panel.currentBlurSize = opt.int
-        } catch (e) {}
+        } catch (e) {
+          console.warn("[omadock] Failed to parse decoration:blur:size option:", e)
+        }
       }
     }
   }
@@ -361,6 +365,7 @@ PanelWindow {
 
         Text {
           text: "Omadock"
+          textFormat: Text.PlainText
           color: Color.menu.text
           font.family: Style.font.family
           font.pixelSize: Style.font.heading
@@ -368,6 +373,7 @@ PanelWindow {
         }
         Text {
           text: "Dock settings"
+          textFormat: Text.PlainText
           color: Util.alpha(Color.menu.text, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -1259,6 +1265,7 @@ PanelWindow {
               topPadding: Style.spacing.lg
               bottomPadding: Style.spacing.lg
               text: "No groups yet. Drag one dock icon onto another, or create one from the apps that are running now."
+              textFormat: Text.PlainText
               color: Util.alpha(Color.menu.text, 0.55)
               wrapMode: Text.WordWrap
               font.family: Style.font.family
@@ -1323,6 +1330,7 @@ PanelWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: nameMouse.containsMouse
                         text: "󰏫"
+                        textFormat: Text.PlainText
                         color: Color.accent
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body
@@ -1413,6 +1421,7 @@ PanelWindow {
               topPadding: Style.spacing.lg
               bottomPadding: Style.spacing.lg
               text: "Omadock is built with love by suva — a medical student, between classes and clinics. It is free, and it always will be.\n\nIf it earns a place on your desktop, you can give some love back to its maker. No tiers, no perks — just support returned."
+              textFormat: Text.PlainText
               color: Color.menu.text
               wrapMode: Text.WordWrap
               font.family: Style.font.family

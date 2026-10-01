@@ -214,7 +214,11 @@ Item {
       var found = localAppLibrary.iconIndex[value]
       if (found) return Util.fileUrl(found)
       var themed = ""
-      try { themed = Quickshell.iconPath(value, true) } catch (e) {}
+      try {
+        themed = Quickshell.iconPath(value, true)
+      } catch (e) {
+        console.warn("[omadock] Failed resolving themed icon path:", value, e)
+      }
       if (themed && themed.length > 0) return themed
       return localAppLibrary.fallbackIcon()
     }
@@ -226,7 +230,11 @@ Item {
       var found = localAppLibrary.iconIndex["application-x-executable"]
       if (found) return Util.fileUrl(found)
       var themed = ""
-      try { themed = Quickshell.iconPath("application-x-executable", true) } catch (e) {}
+      try {
+        themed = Quickshell.iconPath("application-x-executable", true)
+      } catch (e) {
+        console.warn("[omadock] Failed resolving fallback icon path:", e)
+      }
       return themed || ""
     }
 
@@ -598,11 +606,9 @@ Item {
       var top = root.liveToplevelForAddress(addr)
       var title = String((top && top.title) || h.title || "Window")
       var appId = ""
-      try {
-        var hClass = (h && h.lastIpcObject) ? (h.lastIpcObject["class"] || h.lastIpcObject["initialClass"] || "") : ""
-        appId = (top && top.appId) ? DockModel.normalizeId(top.appId)
-          : (hClass ? DockModel.normalizeId(hClass) : "")
-      } catch (e) {}
+      var hClass = (h && h.lastIpcObject) ? (h.lastIpcObject["class"] || h.lastIpcObject["initialClass"] || "") : ""
+      appId = (top && top.appId) ? DockModel.normalizeId(top.appId)
+        : (hClass ? DockModel.normalizeId(hClass) : "")
       mins.push({ address: addr, title: title, appId: appId, waylandToplevel: top })
     }
     // Oldest parked first, so the tiles read chronologically left to right.
@@ -623,23 +629,15 @@ Item {
   }
 
   readonly property string activeId: {
-    try {
-      var top = ToplevelManager.activeToplevel
-      return top && top.appId ? DockModel.normalizeId(top.appId) : ""
-    } catch (e) {
-      return ""
-    }
+    var top = ToplevelManager.activeToplevel
+    return top && top.appId ? DockModel.normalizeId(top.appId) : ""
   }
 
   readonly property string activeWindowAddress: {
-    try {
-      var top = ToplevelManager.activeToplevel
-      if (!top) return ""
-      var h = root.hyprToplevelFor(top)
-      return h ? root.windowAddress(h) : ""
-    } catch (e) {
-      return ""
-    }
+    var top = ToplevelManager.activeToplevel
+    if (!top) return ""
+    var h = root.hyprToplevelFor(top)
+    return h ? root.windowAddress(h) : ""
   }
   onActiveIdChanged: if (root.activeId) root.clearUrgentApp(root.activeId, root.activeWindowAddress)
   onActiveWindowAddressChanged: if (root.activeWindowAddress) root.clearUrgentApp(root.activeId, root.activeWindowAddress)
@@ -782,7 +780,11 @@ Item {
   readonly property var themeGradientColors: {
     var _tv = root.themeVersion
     var text = ""
-    try { text = DockModel.readCapped(themeColorsFile.text, DockModel.MAX_COLORS_TOML_BYTES) } catch (e) {}
+    try {
+      text = DockModel.readCapped(themeColorsFile.text, DockModel.MAX_COLORS_TOML_BYTES)
+    } catch (e) {
+      console.warn("[omadock] Failed reading theme colors:", e)
+    }
     var named = {}
     var re = /^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6})"/gm
     var m
@@ -1008,6 +1010,7 @@ Item {
         try {
           clients = JSON.parse(this.text) || []
         } catch (e) {
+          console.warn("[omadock] Failed parsing clients JSON:", e)
           return
         }
 
@@ -1102,6 +1105,7 @@ Item {
           root.activeStackTotalCount = parsed.count || 0
           root.activeStackEntries = parsed.items || []
         } catch (e) {
+          console.warn("[omadock] Failed parsing folder scan:", e)
           root.activeStackTotalCount = 0
           root.activeStackEntries = []
         }
@@ -1139,6 +1143,7 @@ Item {
           var parsed = JSON.parse(this.text) || []
           root.mountedDrives = DockModel.isList(parsed) ? parsed : []
         } catch (e) {
+          console.warn("[omadock] Failed parsing removable drives:", e)
           root.mountedDrives = []
         }
       }
@@ -1646,7 +1651,9 @@ Item {
         var parsed = JSON.parse(txt)
         if (parsed && typeof parsed.dnd === "boolean") return parsed.dnd
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[omadock] Failed reading dnd config:", e)
+    }
     return false
   }
 
@@ -1706,7 +1713,9 @@ Item {
           var addressOnly = root.windowAddress(root.hyprToplevelFor(top))
           if (addressOnly) root.clearUrgentApp("", addressOnly)
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("[omadock] Error handling active toplevel change:", e)
+      }
       debounceOverlapTimer.restart()
       root.syncContextWindows()
     }
@@ -2056,10 +2065,16 @@ Item {
     try {
       var t = DockModel.readCapped(themeIconsFile.text, DockModel.MAX_ICONS_THEME_BYTES).trim()
       if (t) root.currentIconThemeName = t
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[omadock] Failed reading icon theme:", e)
+    }
     root.themeVersion++
     if (root.appLibrary) {
-      try { root.appLibrary.refreshIcons() } catch (e) {}
+      try {
+        root.appLibrary.refreshIcons()
+      } catch (e) {
+        console.warn("[omadock] Failed refreshing appLibrary icons:", e)
+      }
     }
     root.rescanApps()
   }
@@ -2502,7 +2517,9 @@ Item {
         var h = root.hyprToplevelFor(top)
         if (root.windowAddress(h) === addr) return top
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[omadock] Failed resolving live toplevel for address:", e)
+    }
     return null
   }
 
@@ -2514,7 +2531,9 @@ Item {
         var h = tops[i]
         if (h && root.windowAddress(h) === addr) return h
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[omadock] Failed resolving live Hyprland toplevel for address:", e)
+    }
     return null
   }
 
@@ -2965,7 +2984,6 @@ Item {
       if (rawAddr) normAddr = "0x" + rawAddr
     }
 
-    // Direct address deletion if present
     if (normAddr && map[normAddr]) {
       delete map[normAddr]
       changed = true
@@ -2974,7 +2992,6 @@ Item {
     var allEntries = root.pinnedSection.concat(root.runningSection).concat(root.groupedSection || [])
     var targetEntries = []
 
-    // Find entries matching address or appId
     for (var i = 0; i < allEntries.length; i++) {
       var entry = allEntries[i]
       if (!entry) continue
@@ -3000,7 +3017,6 @@ Item {
       }
     }
 
-    // Direct raw appId deletion
     if (appId) {
       var rawId = DockModel.stripDesktop(appId)
       var normId = DockModel.normalizeId(appId)
@@ -3009,7 +3025,6 @@ Item {
       if (normId && map[normId]) { delete map[normId]; changed = true }
     }
 
-    // Delete keys for matched entries
     for (var t = 0; t < targetEntries.length; t++) {
       var tEntry = targetEntries[t]
       var tId = tEntry.appId || tEntry.id
@@ -3449,13 +3464,17 @@ Item {
         action.execute()
         return
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[omadock] Failed executing desktop action:", e)
+    }
 
     try {
       if (action.command && action.command.length > 0) {
         Quickshell.execDetached(action.command)
       }
-    } catch (e2) {}
+    } catch (e2) {
+      console.warn("[omadock] Failed launching desktop action command:", e2)
+    }
   }
 
   function isWindowFocused(win) {
@@ -3494,11 +3513,9 @@ Item {
     }
     root.contextWindowList = wins
     root.contextWindows = wins.length
-    try {
-      if (root.appContextMenuColumnRef && root.appContextMenuColumnRef.selectedWindowIdx >= wins.length) {
-        root.appContextMenuColumnRef.selectedWindowIdx = -1
-      }
-    } catch (e) {}
+    if (root.appContextMenuColumnRef && root.appContextMenuColumnRef.selectedWindowIdx >= wins.length) {
+      root.appContextMenuColumnRef.selectedWindowIdx = -1
+    }
   }
 
   function openContext(appId, x, y) {
@@ -3514,7 +3531,7 @@ Item {
     var canonicalId = (deskEntry && deskEntry.id) ? deskEntry.id : appId
     root.contextPinned = DockModel.isPinned(root.pinnedIds, appId) || (canonicalId !== appId && DockModel.isPinned(root.pinnedIds, canonicalId))
     root.contextDesktopActions = (deskEntry && deskEntry.actions) ? deskEntry.actions : []
-    try { if (root.appContextMenuColumnRef) root.appContextMenuColumnRef.selectedWindowIdx = -1 } catch (e) {}
+    if (root.appContextMenuColumnRef) root.appContextMenuColumnRef.selectedWindowIdx = -1
     root.contextX = x
     root.contextY = y
   }

@@ -480,11 +480,16 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 
 A running changelog of user-facing changes. Full detail lives in the [commit history](https://github.com/thepathless/omadock/commits/main).
 
-### Unreleased — 2026-09-29
-- **Security (marketplace review [#6544](https://github.com/omacom/omarchy-plugin-marketplace/issues/6544)):** the byte cap and regular-file gate now apply **before** any watched file content loads into QML — `FileView` is a change-watcher only and content is read through a stat-then-read gate bounded by per-file byte ceilings, so a large file or FIFO can never enter or stall the shell at the file-read boundary.
-- **Feature:** the full **settings panel** ([9f9b3fb](https://github.com/thepathless/omadock/commit/9f9b3fb), [9f465d0](https://github.com/thepathless/omadock/commit/9f465d0)) — right-click the Omarchy logo or empty dock space for a sidebar (*Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders*, *App Groups*) with live-applying switches, sliders and dropdowns, plus **border opacity** control and **Supporters/About** pages. Also openable from a keybind: `omarchy-shell omadock openSettings`.
-- **Tooling ([53c439a](https://github.com/thepathless/omadock/commit/53c439a)):** load-time smoke test (`tests/smoke-test.sh`) — asserts the dock actually instantiates in the live shell (overlay layer mapped, IPC target registered, clean logs).
-- **Release ([ddd1c4f](https://github.com/thepathless/omadock/commit/ddd1c4f)):** merged `pr-12` into `main` (settings panel, border opacity, load-time smoke test), verified on the live desktop.
+### v4.0.0 — 2026-10-01
+- **Major release, synchronized with the Omarchy 4.x shell:**
+  - **Settings panel ([9f9b3fb](https://github.com/thepathless/omadock/commit/9f9b3fb), [9f465d0](https://github.com/thepathless/omadock/commit/9f465d0)):** the full GUI configuration panel — right-click the Omarchy logo or empty dock space for a sidebar (*Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Folders*, *App Groups*) with live-applying switches, sliders and dropdowns, plus **border opacity** control and **Supporters/About** pages. Also openable from a keybind: `omarchy-shell omadock openSettings`.
+  - **Icon styles (PR #13):** `mono`, `pixel` and `dots` rendering modes alongside classic theme icons, with **icon colour** tinting (text / accent / black-and-white) driven by `shaders/iconstyle.frag`.
+  - **Visual polish:** dynamic **gradient backgrounds** (`shaders/gradient.frag`), **film grain** (`shaders/grain.frag`) and specular frosted-glass rims.
+  - **Drag and drop:** files dropped on a dock icon are handed to that app, and folders dropped on the dock stack into a pinned folder.
+  - **Security (marketplace review [#6544](https://github.com/omacom/omarchy-plugin-marketplace/issues/6544)):** 100% `Text.PlainText` coverage across the UI, and the byte cap and regular-file gate apply **before** any watched file content loads into QML — `FileView` is a change-watcher only and content is read through a stat-then-read gate bounded by per-file byte ceilings, so a large file or FIFO can never enter or stall the shell at the file-read boundary.
+  - **Clean architecture:** purged empty catch blocks and AI narration comments, added explicit null-safety guards, verified zero-CPU idle (2 jiffies / 6 s).
+  - **Tooling ([53c439a](https://github.com/thepathless/omadock/commit/53c439a)):** load-time smoke test (`tests/smoke-test.sh`) — asserts the dock actually instantiates in the live shell (overlay layer mapped, IPC target registered, clean logs).
+  - **Release ([ddd1c4f](https://github.com/thepathless/omadock/commit/ddd1c4f)):** merged `pr-12` into `main` (settings panel, border opacity, load-time smoke test), verified on the live desktop.
 
 ### v3.8.0 — 2026-09-28
 - **Feature ([#11](https://github.com/thepathless/omadock/pull/11), contributed by [@G-Pappas](https://github.com/G-Pappas)):** opt-in **multi-monitor mode** — one dock per connected monitor, each listing only the windows on that monitor (like the Windows taskbar on every display). Pinned apps appear on every dock, minimized tiles follow their origin monitor, monitors are hotplug-aware, and keybinds act on the focused monitor's dock first. Enable via *Settings → Placement & Alignment → Show on All Monitors* or `"multiMonitor": true`. **Off by default** — single-dock behavior is unchanged.
@@ -510,3 +515,8 @@ A running changelog of user-facing changes. Full detail lives in the [commit his
 - **v3.6.5:** monochrome (`white`/`black`/`symbolic`) folder icons preserved through icon resolution.
 - **v3.6.4 / v3.6.3:** explicit Yaru folder-color paths kept; `noDisplay` desktop entries hidden from the dock.
 - **v3.6.0:** stable baseline — zero-CPU region autohide, tiling window adaptation, app groups, folders, minimized-window tiles.
+
+### Early History (v1.4.3 – v3.5.0)
+- **v1.4.3 (2026-08-19):** initial release ([011d779](https://github.com/thepathless/omadock/commit/011d779)) of Omadock for Omarchy Linux — launcher, running indicators and the first dock surface.
+- **v1.5.0 – v2.5.0:** Hyprland IPC **window focus dispatch** and workspace hints, middle-click launch, **LIFO** toggle minimize/restore, LIFO scroll cycling through an app's windows without warping the mouse pointer, and smart PWA/Flutter desktop-entry icon matching.
+- **v3.0.0 – v3.5.0:** the raised-cosine **magnification falloff curve**, hover **wave growth** (the dock card expands with its icons), pinned **folder stacks** with file-preview popovers, app group collections, and the **zero-CPU autohide** architecture (`BorderSurface` + `Region`).
