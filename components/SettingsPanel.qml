@@ -1451,6 +1451,130 @@ PanelWindow {
                 onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/thepathless/omadock/blob/main/SPONSORS.md"))
               }
             }
+
+            SectionLabel { text: "Code Contributors" }
+
+            SettingRow {
+              label: "@priard (Lukasz)"
+              hint: "macOS folder stacks, icon shaders, gradients, grain, drop-to-open"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/priard"))
+              }
+            }
+
+            SettingRow {
+              label: "@G-Pappas (George P.)"
+              hint: "Multi-monitor docks & per-output instance management"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/G-Pappas"))
+              }
+            }
+
+            SettingRow {
+              label: "@NothingManTR (Taha Can)"
+              hint: "Removable media drives & safe eject, smart app matching, jump lists"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/NothingManTR"))
+              }
+            }
+
+            SettingRow {
+              label: "@assada"
+              hint: "Window focus dispatch & Hyprland layout awareness"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/assada"))
+              }
+            }
+
+            SettingRow {
+              label: "@tdslot"
+              hint: "Desktop entry launch suffix validation fix for pinned apps"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/tdslot"))
+              }
+            }
+
+            SettingRow {
+              label: "@Tech0001"
+              hint: "Application matching restoration"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/Tech0001"))
+              }
+            }
+
+            SectionLabel { text: "Bug Hunters & Diagnostics" }
+
+            SettingRow {
+              label: "@justinlharter"
+              hint: "Suspend/resume screen null recovery diagnostics"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/justinlharter"))
+              }
+            }
+
+            SettingRow {
+              label: "@maugustoldo (Marcos Augusto)"
+              hint: "GTK icon resolving, launcher matching, and theme accent"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/maugustoldo"))
+              }
+            }
+
+            SettingRow {
+              label: "@m-bowden (Michael Bowden)"
+              hint: "Webapp Exec-URL .execString desktop entry investigation"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/m-bowden"))
+              }
+            }
+
+            SettingRow {
+              label: "@herman6888"
+              hint: "Omarchy 4.x overlay plugin appLibrary diagnostic"
+
+              Button {
+                text: "GitHub ↗"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/herman6888"))
+              }
+            }
           }
 
           // ================================================= About
