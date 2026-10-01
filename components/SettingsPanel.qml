@@ -1420,7 +1420,7 @@ PanelWindow {
               width: parent.width
               topPadding: Style.spacing.lg
               bottomPadding: Style.spacing.lg
-              text: "Omadock is built with love by suva — a medical student, between classes and clinics. It is free, and it always will be.\n\nIf it earns a place on your desktop, you can give some love back to its maker. No tiers, no perks — just support returned."
+              text: "Omadock is built with love by thepathless — a medical student, between classes and clinics. It is free, and it always will be.\n\nIf it earns a place on your desktop, you can give some love back to its maker. No tiers, no perks — just support returned."
               textFormat: Text.PlainText
               color: Color.menu.text
               wrapMode: Text.WordWrap
@@ -1429,7 +1429,7 @@ PanelWindow {
             }
 
             SettingRow {
-              label: "Supporter #1 — suva"
+              label: "Supporter #1 — thepathless"
               hint: "The maker. Its first and forever supporter."
 
               Button {
