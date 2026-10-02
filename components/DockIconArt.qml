@@ -17,6 +17,9 @@ import qs.Commons
 // "show original on hover" option). The styled layers stay built while it is
 // on, so switching back and forth costs no decode or shader rebuild.
 //
+// hovered and hoverFx (the dock's object) drive the hover effects that keep
+// the icon's size; the drawn icon sits inside a HoverFx.
+//
 // Instead of an image source, the icon can be any item declared inside
 // (e.g. a font glyph). Such content is already one colour, so "mono" shows it
 // as is (the caller colours it with the tint); "pixel" and "dots" work from
@@ -29,6 +32,8 @@ Item {
   property bool showOriginal: false
   // The style actually drawn right now.
   readonly property string shownStyle: art.showOriginal ? "original" : art.iconStyle
+  property bool hovered: false
+  property var hoverFx: null
   property color tint: Color.bar.text
   // Cells across the icon for the pixel and dots styles.
   property int grid: 16
@@ -56,8 +61,17 @@ Item {
   // The item the grid styles read from.
   readonly property Item styleSource: art.hasCustom ? custom : img
 
+  HoverFx {
+    id: fxHost
+    anchors.fill: parent
+    hovered: art.hovered
+    hoverFx: art.hoverFx
+  }
+
+  // Drawn inside fxHost, so hover effects move and outline it.
   Item {
     id: canvas
+    parent: fxHost.contentItem
     anchors.fill: parent
 
     layer.enabled: art.dropShadow

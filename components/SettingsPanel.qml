@@ -1147,6 +1147,7 @@ PanelWindow {
               options: [
                 { value: "zoom", label: "Zoom" },
                 { value: "wave", label: "Wave" },
+                { value: "lift", label: "Lift" },
                 { value: "off", label: "None" }
               ]
               value: root ? root.hoverEffect : "zoom"

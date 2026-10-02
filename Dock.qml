@@ -793,10 +793,16 @@ Item {
   property bool showMinimizedTiles: true
   // "zoom" grows only the icon under the pointer and leaves the layout alone —
   // the behaviour this dock shipped with, and the default. "wave" is the
-  // falloff: neighbours respond and the row carries the extra width. "off" is
-  // no hover growth at all.
+  // falloff: neighbours respond and the row carries the extra width. The rest
+  // keep the icon's size (components/HoverFx.qml): "lift" raises it over a
+  // shadow. "off" is no hover effect at all.
   property string hoverEffect: "wave"
   readonly property bool waveHover: root.hoverEffect === "wave"
+  // What HoverFx and DockIconArt read, in one object so each dock item
+  // passes a single property.
+  readonly property var hoverFx: ({
+    effect: root.hoverEffect
+  })
   property bool launchBounce: true
   property bool advancedTooltips: true
   property real borderOpacity: -1.0
@@ -2082,7 +2088,7 @@ Item {
   // Sets properties only; callers save and update the blur rule.
   function applyLook(parsed) {
     // Migrates the old boolean: an explicit magnification:false meant no growth.
-    root.hoverEffect = parsed && ["zoom", "wave", "off"].indexOf(parsed.hoverEffect) >= 0
+    root.hoverEffect = parsed && ["zoom", "wave", "lift", "off"].indexOf(parsed.hoverEffect) >= 0
       ? parsed.hoverEffect
       : ((parsed && parsed.magnification === false) ? "off" : "zoom")
     root.launchBounce = parsed && parsed.launchBounce !== false
