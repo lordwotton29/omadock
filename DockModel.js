@@ -288,6 +288,7 @@ function parsePinned(raw) {
   try {
     parsed = JSON.parse(text)
   } catch (e) {
+    console.warn("[omadock] Failed parsing dock.json, keeping no pins:", e)
     return []
   }
   if (!parsed || typeof parsed !== "object") return []
@@ -1055,6 +1056,7 @@ function resolveAppIcon(appLibrary, appRows, appId) {
     if (qp && qp !== "") return qp
   } catch (e) {
     // Quickshell iconPath fallback failed; proceed to ultimate fallback
+    console.warn("[omadock] iconPath fallback failed for", id, e)
   }
 
   // 5. Ultimate fallback
@@ -1065,6 +1067,7 @@ function resolveAppIcon(appLibrary, appRows, appId) {
   try {
     return Quickshell.iconPath("application-x-executable", true)
   } catch (e2) {
+    console.warn("[omadock] Ultimate icon fallback failed:", e2)
     return ""
   }
 }

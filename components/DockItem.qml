@@ -341,10 +341,20 @@ Item {
             item.selectedWindowIdx = (item.selectedWindowIdx + dir + wins.length) % wins.length
           }
 
-          // If context menu is open for this app, synchronize its selection
+          // If context menu is open for this app, synchronize its selection.
+          // The menu's rows index item.windowList (parked windows included),
+          // while this selection was computed over tooltipWindows (visible
+          // only) — translate it by address or the highlight and the click
+          // land on the wrong window.
           if (root && root.contextAppId === item.appId) {
-            if (typeof appContextMenuColumn !== "undefined" && appContextMenuColumn)
-              appContextMenuColumn.selectedWindowIdx = item.selectedWindowIdx
+            if (typeof appContextMenuColumn !== "undefined" && appContextMenuColumn) {
+              var selAddr = wins[item.selectedWindowIdx] ? wins[item.selectedWindowIdx].address : ""
+              var menuIdx = -1
+              for (var mi = 0; item.windowList && mi < item.windowList.length; mi++) {
+                if (item.windowList[mi] && item.windowList[mi].address === selAddr) { menuIdx = mi; break }
+              }
+              appContextMenuColumn.selectedWindowIdx = menuIdx
+            }
             return
           }
 
@@ -410,17 +420,23 @@ Item {
       } else if (mouse.button === Qt.LeftButton) {
         // If context menu is open for this app:
         if (root && root.contextAppId === item.appId) {
-          var chosenIdx = item.selectedWindowIdx
-          if (typeof appContextMenuColumn !== "undefined" && appContextMenuColumn
-              && appContextMenuColumn.selectedWindowIdx >= 0) {
-            chosenIdx = appContextMenuColumn.selectedWindowIdx
+          // Two index spaces meet here: the menu column indexes the full
+          // windowList (set by the menu's own wheel or the translated sync
+          // above), while item.selectedWindowIdx indexes tooltipWindows
+          // (visible only). Resolve each in its own space, or a click picks
+          // a different window than the one highlighted.
+          var chosenWin = null
+          var menuIdx = -1
+          if (typeof appContextMenuColumn !== "undefined" && appContextMenuColumn)
+            menuIdx = appContextMenuColumn.selectedWindowIdx
+          if (menuIdx >= 0 && item.windowList && menuIdx < item.windowList.length) {
+            chosenWin = item.windowList[menuIdx]
+          } else if (item.selectedWindowIdx >= 0 && item.tooltipWindows && item.selectedWindowIdx < item.tooltipWindows.length) {
+            chosenWin = item.tooltipWindows[item.selectedWindowIdx]
           }
 
-          if (chosenIdx >= 0 && item.windowList && chosenIdx < item.windowList.length) {
-            var chosenWin = item.windowList[chosenIdx]
-            if (chosenWin && chosenWin.address) {
-              root.focusWindowByAddress(chosenWin.address, item.appId)
-            }
+          if (chosenWin && chosenWin.address) {
+            root.focusWindowByAddress(chosenWin.address, item.appId)
           }
           item.selectedWindowIdx = -1
           if (typeof appContextMenuColumn !== "undefined" && appContextMenuColumn)

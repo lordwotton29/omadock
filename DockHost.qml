@@ -46,7 +46,7 @@ Item {
     var raw = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
     var parsed = {}
     if (raw) {
-      try { parsed = JSON.parse(raw) || {} } catch (e) { parsed = {} }
+      try { parsed = JSON.parse(raw) || {} } catch (e) { console.warn("[omadock] Failed parsing omadock.json in host:", e); parsed = {} }
     }
     host.multiMonitor = parsed.multiMonitor === true
     host.screenName = typeof parsed.screen === "string" ? parsed.screen : ""

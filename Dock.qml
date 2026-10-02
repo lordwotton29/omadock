@@ -191,6 +191,7 @@ Item {
         if (!values) return []
         return values.filter(function(e) { return !e.noDisplay })
       } catch (e) {
+        console.warn("[omadock] Failed reading desktop entries:", e)
         return []
       }
     }
@@ -334,6 +335,12 @@ Item {
   // Build the index once at load, but only when the host withheld its own
   // library — with a host library present the index would be dead weight.
   Component.onCompleted: {
+    // Apply the config now: a missing omadock.json never fires onLoaded (the
+    // capped gate rejects it), so without this the loadConfig defaults (pinned
+    // Downloads folder, documented hover effect, blur-rule reconcile) never
+    // ran on a fresh install. Real values re-apply unchanged once the async
+    // gate lands them.
+    root.loadConfig()
     if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
     // Fills HyprlandMonitor.scale for outputScale.
     Hyprland.refreshMonitors()
@@ -571,6 +578,7 @@ Item {
     try {
       customColor = Qt.color(custom)
     } catch (e) {
+      console.warn("[omadock] Invalid dock background colour, using theme:", custom, e)
       return Color.bar.text
     }
     var cardIsLight = root.isLight(customColor)
@@ -792,10 +800,10 @@ Item {
   property bool showTooltips: true
   property bool showMinimizedTiles: true
   // "zoom" grows only the icon under the pointer and leaves the layout alone —
-  // the behaviour this dock shipped with, and the default. "wave" is the
-  // falloff: neighbours respond and the row carries the extra width. "off" is
-  // no hover growth at all.
-  property string hoverEffect: "wave"
+  // the behaviour this dock shipped with, and the default (README and
+  // loadConfig agree). "wave" is the falloff: neighbours respond and the row
+  // carries the extra width. "off" is no hover growth at all.
+  property string hoverEffect: "zoom"
   readonly property bool waveHover: root.hoverEffect === "wave"
   property bool launchBounce: true
   property bool advancedTooltips: true
@@ -2058,6 +2066,7 @@ Item {
       try {
         parsed = JSON.parse(raw)
       } catch (e) {
+        console.warn("[omadock] Failed parsing omadock.json, using defaults:", e)
         parsed = {}
       }
     }
@@ -3312,6 +3321,7 @@ Item {
       var txt = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
       if (txt) conf = JSON.parse(txt) || {}
     } catch (e) {
+      console.warn("[omadock] Failed parsing omadock.json for save, rebuilding:", e)
       conf = {}
     }
     conf.alignment = root.alignment || "center"
