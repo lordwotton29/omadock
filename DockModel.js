@@ -796,9 +796,14 @@ function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimi
   enrich(runningOut)
 
   var groupedOut = []
+  var seenGrouped = {}
   for (var ga in groupedMap) {
+    if (seenGrouped[ga]) continue
     var gwins = getWindowsFor(ga)
     if (gwins.length > 0) {
+      seenGrouped[ga] = true
+      var gc = getCandidates(ga)
+      for (var c = 0; c < gc.length; c++) seenGrouped[gc[c]] = true
       groupedOut.push({
         id: ga,
         appId: ga,
@@ -881,7 +886,9 @@ function pickAppWindow(toplevels, activeToplevel, appId, direction) {
 function focusWindow(toplevel) {
   try {
     if (toplevel && typeof toplevel.activate === "function") toplevel.activate()
-  } catch (e) {}
+  } catch (e) {
+    console.warn("[omadock] focusWindow error:", e)
+  }
 }
 
 function closeApp(toplevels, appId) {
@@ -898,7 +905,9 @@ function closeApp(toplevels, appId) {
           t.close()
           closed += 1
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("[omadock] closeApp error:", e)
+      }
     }
   }
   return closed
@@ -1044,7 +1053,9 @@ function resolveAppIcon(appLibrary, appRows, appId) {
   try {
     var qp = Quickshell.iconPath(entry && entry.icon ? entry.icon : id, true)
     if (qp && qp !== "") return qp
-  } catch (e) {}
+  } catch (e) {
+    // Quickshell iconPath fallback failed; proceed to ultimate fallback
+  }
 
   // 5. Ultimate fallback
   if (appLibrary) {

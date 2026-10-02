@@ -85,7 +85,7 @@ Item {
     model: host.multiMonitor ? host.realScreens : ["single"]
 
     delegate: Dock {
-      property var modelData
+      required property var modelData
       readonly property bool perScreen: typeof modelData !== "string"
 
       shell: host.shell
