@@ -1051,6 +1051,8 @@ Item {
   property var _lastProcessedNotifTimestamp: 0
   property int revealDelay: 160
   property int tooltipDelay: 450
+  // Least time between two wheel steps on the dock.
+  property int wheelStepDelay: 150
 
   // ------------------------------------------------- autohide state
 
@@ -2153,6 +2155,9 @@ Item {
     root.tooltipDelay = parsed && typeof parsed.tooltipDelay === "number"
       ? Math.max(0, Math.min(5000, Math.round(parsed.tooltipDelay)))
       : 450
+    root.wheelStepDelay = parsed && typeof parsed.wheelStepDelay === "number"
+      ? Math.max(0, Math.min(1000, Math.round(parsed.wheelStepDelay)))
+      : 150
     if (parsed && DockModel.isList(parsed.pinnedFolders)) {
       root.pinnedFolders = DockModel.boundPinnedFolders(parsed.pinnedFolders)
     } else {
@@ -2560,19 +2565,6 @@ Item {
     root.saveConfig()
   }
 
-  function cycleApp(appId, direction) {
-    var entry = root.entryForId(appId)
-    var next = root.stepWindow(root.visibleWindows(entry ? (entry.windowList || []) : []), direction)
-    if (next && next.address) {
-      root.focusWindowByAddress(next.address, appId)
-      return
-    }
-    // No handles to tell parked from visible: fall back to the pure order.
-    var top = DockModel.pickAppWindow(
-      (ToplevelManager.toplevels ? ToplevelManager.toplevels.values : []), ToplevelManager.activeToplevel, appId, direction)
-    if (top) root.focusToplevel(top, appId)
-  }
-
   // ------------------------------------------------- window plumbing
 
   function hyprToplevelFor(toplevel) {
@@ -2598,14 +2590,6 @@ Item {
   // the running compositor speaks.
   function hyprDispatch(lua, legacy) {
     Hyprland.dispatch(Hyprland.usingLua ? lua : legacy)
-  }
-
-  // Wheel over the Omarchy logo walks workspaces in order. "e+1"/"e-1" are
-  // standard Hyprland workspace selectors (nearest existing, relative).
-  function cycleWorkspace(dir) {
-    var sel = dir > 0 ? "e+1" : "e-1"
-    root.hyprDispatch('hl.dsp.focus({ workspace = "' + sel + '" })',
-                      "workspace " + sel)
   }
 
   function workspaceTarget(workspace) {
@@ -2889,6 +2873,32 @@ Item {
       }
     }
     return null
+  }
+
+  // Turns wheel events into steps: -1 (up), 1 (down) or 0. High-resolution
+  // wheels send many small deltas per notch, so deltas add up to a full notch
+  // (120) first, and a step needs wheelStepDelay since the previous one,
+  // which also tames free-spinning wheels. Leftovers are dropped rather than
+  // queued. Each wheel target keeps its own state under key.
+  property var wheelState: ({})
+
+  function wheelStep(key, angleDelta) {
+    if (!angleDelta) return 0
+    var now = Date.now()
+    var st = root.wheelState[key] || { acc: 0, lastEvent: 0, lastStep: 0 }
+    if (now - st.lastEvent > 400 || (st.acc !== 0 && (st.acc > 0) !== (angleDelta > 0))) st.acc = 0
+    st.lastEvent = now
+    st.acc += angleDelta
+    var step = 0
+    if (Math.abs(st.acc) >= 120) {
+      if (now - st.lastStep >= root.wheelStepDelay) {
+        step = st.acc > 0 ? -1 : 1
+        st.lastStep = now
+      }
+      st.acc = 0
+    }
+    root.wheelState[key] = st
+    return step
   }
 
   // One step around the app's windows from wherever the focus is.
@@ -3373,6 +3383,7 @@ Item {
     conf.urgentSoundName = root.urgentSoundName
     conf.revealDelay = root.revealDelay
     conf.tooltipDelay = root.tooltipDelay
+    conf.wheelStepDelay = root.wheelStepDelay
     conf.pinnedFolders = DockModel.boundPinnedFolders(root.pinnedFolders)
     root._savingConfig = true
     configFile.setText(JSON.stringify(conf, null, 2))

@@ -535,7 +535,6 @@ Item {
         tooltip: "Omarchy"
         onPressed: Quickshell.execDetached(["omarchy-menu", "toggle", "root"])
         onMiddleClicked: Quickshell.execDetached(["omarchy-launch-terminal"])
-        onWheelScrolled: function(dir) { if (root) root.cycleWorkspace(dir) }
         onMenuRequested: function(cx, cy) {
           if (root) root.openDockSettingsMenu(cx, cy)
         }
@@ -582,7 +581,6 @@ Item {
               onActivateRequested: function(aid) { if (root) root.activate(aid) }
               onNewWindowRequested: function(aid) { if (root) root.launchApp(aid, null) }
               onMenuRequested: function(aid, cx, cy) { if (root) root.openContext(aid, cx, cy) }
-              onWheelScrolled: function(aid, dir) { if (root) root.cycleApp(aid, dir) }
               onDragStarted: function(aid) {
                 if (root) {
                   root.dragAppId = aid
@@ -704,7 +702,6 @@ Item {
           onActivateRequested: function(aid) { if (root) root.activate(aid) }
           onNewWindowRequested: function(aid) { if (root) root.launchApp(aid, null) }
           onMenuRequested: function(aid, cx, cy) { if (root) root.openContext(aid, cx, cy) }
-          onWheelScrolled: function(aid, dir) { if (root) root.cycleApp(aid, dir) }
           onDragStarted: function(aid) {
             if (root) {
               root.dragAppId = aid
