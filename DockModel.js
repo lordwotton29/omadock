@@ -536,11 +536,14 @@ function pickLook(conf) {
   return out
 }
 
-function lookEquals(a, b) {
-  var x = a || {}
-  var y = b || {}
+// Every look key the preset holds has the same value in cur. A preset
+// saved before a key existed still matches on the keys it has.
+function lookIncludes(cur, look) {
+  var x = cur || {}
+  var y = look || {}
   for (var i = 0; i < LOOK_KEYS.length; i++) {
     var k = LOOK_KEYS[i]
+    if (!Object.prototype.hasOwnProperty.call(y, k)) continue
     if (JSON.stringify(x[k]) !== JSON.stringify(y[k])) return false
   }
   return true

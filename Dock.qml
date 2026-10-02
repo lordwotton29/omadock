@@ -3472,7 +3472,7 @@ Item {
     var cur = root.currentLook
     var list = root.presets || []
     for (var i = 0; i < list.length; i++)
-      if (list[i] && DockModel.lookEquals(cur, list[i].look)) return list[i].id
+      if (list[i] && DockModel.lookIncludes(cur, list[i].look)) return list[i].id
     return ""
   }
 
