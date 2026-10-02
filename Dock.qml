@@ -2171,6 +2171,7 @@ Item {
     } else {
       root.appGroups = []
     }
+    root.presets = parsed ? DockModel.boundPresets(parsed.presets) : []
     root.autohide = parsed && parsed.autohide !== false
     root.intelligentAutohide = parsed && parsed.intelligentAutohide !== false
     root.showAppsButton = parsed && parsed.showAppsButton !== false
@@ -3441,6 +3442,7 @@ Item {
     conf.revealDelay = root.revealDelay
     conf.tooltipDelay = root.tooltipDelay
     conf.pinnedFolders = DockModel.boundPinnedFolders(root.pinnedFolders)
+    conf.presets = DockModel.boundPresets(root.presets)
     return conf
   }
 
@@ -3459,6 +3461,106 @@ Item {
     root._savingConfig = true
     configFile.setText(JSON.stringify(conf, null, 2))
     Qt.callLater(function() { root._savingConfig = false })
+  }
+
+  // ------------------------------------------------- appearance presets
+  // Named copies of the look (DockModel.LOOK_KEYS), at most six, kept in the
+  // config. Applying one goes through applyLook, like loading the config.
+  property var presets: []
+  readonly property bool canSavePreset: (root.presets || []).length < DockModel.MAX_PRESETS
+  readonly property string activePresetId: {
+    var cur = root.currentLook
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++)
+      if (list[i] && DockModel.lookEquals(cur, list[i].look)) return list[i].id
+    return ""
+  }
+
+  function presetIndex(id) {
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return i
+    return -1
+  }
+
+  // The preset with this name, ignoring case; "" when none or the name is
+  // longer than a preset name can be.
+  function presetIdByName(name) {
+    var raw = String(name == null ? "" : name).trim()
+    if (raw === "" || raw.length > DockModel.MAX_PRESET_NAME) return ""
+    var want = DockModel.cleanPresetName(raw).toLowerCase()
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++)
+      if (list[i] && list[i].name.toLowerCase() === want) return list[i].id
+    return ""
+  }
+
+  function presetNameTaken(name, exceptId) {
+    var id = root.presetIdByName(name)
+    return id !== "" && id !== exceptId
+  }
+
+  function nextPresetName() {
+    for (var n = 1; n <= DockModel.MAX_PRESETS + 1; n++)
+      if (!root.presetNameTaken("Preset " + n, "")) return "Preset " + n
+    return "Preset"
+  }
+
+  function replacePreset(i, preset) {
+    var next = root.presets.slice()
+    next[i] = preset
+    root.presets = next
+    root.saveConfig()
+  }
+
+  // A new preset from the current look; returns its id, or "" when the list
+  // is full. A missing or taken name becomes "Preset N".
+  function savePreset(name) {
+    if (!root.canSavePreset) return ""
+    var clean = DockModel.cleanPresetName(name)
+    if (clean === "" || root.presetNameTaken(clean, "")) clean = root.nextPresetName()
+    var id = "preset_" + Date.now()
+    while (root.presetIndex(id) >= 0) id += "0"
+    root.presets = (root.presets || []).concat([{ id: id, name: clean, look: root.currentLook }])
+    root.saveConfig()
+    return id
+  }
+
+  // Refuses an empty name or one another preset has.
+  function renamePreset(id, name) {
+    var i = root.presetIndex(id)
+    var clean = DockModel.cleanPresetName(name)
+    if (i < 0 || clean === "" || root.presetNameTaken(clean, id)) return false
+    var p = root.presets[i]
+    root.replacePreset(i, { id: p.id, name: clean, look: p.look })
+    return true
+  }
+
+  function updatePreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    var p = root.presets[i]
+    root.replacePreset(i, { id: p.id, name: p.name, look: root.currentLook })
+    return true
+  }
+
+  function deletePreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    var next = root.presets.slice()
+    next.splice(i, 1)
+    root.presets = next
+    root.saveConfig()
+    return true
+  }
+
+  // Keys a preset lacks (saved before they existed) keep their current value.
+  function applyPreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    root.applyLook(Object.assign({}, root.currentLook, root.presets[i].look))
+    root.applyBlurRule(false)
+    root.saveConfig()
+    return true
   }
 
   // ------------------------------------------------- what a click means
