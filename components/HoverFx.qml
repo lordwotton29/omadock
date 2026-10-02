@@ -9,6 +9,8 @@ import qs.Commons
 //   glow    a halo in the accent colour that follows the content's shape,
 //           with a ripple leaving it once as the pointer arrives
 //           (shaders/hoverglow.frag)
+//   glitch  a short RGB-split burst with jumping bands as the pointer
+//           arrives (shaders/hoverglitch.frag)
 //
 // Any other value draws the content as is. hoverFx is the dock's object
 // (Dock.qml), so every item follows the setting without plumbing of its own.
@@ -33,11 +35,19 @@ Item {
 
   // One-shot animations started as the pointer arrives.
   property real ring: 0
+  property real glitchT: 0
+  property real glitchSeed: 0
+  readonly property bool glitching: fx.effect === "glitch" && glitchAnim.running
   onHoveredChanged: {
     if (!fx.hovered) return
     if (fx.effect === "glow") ringAnim.restart()
+    if (fx.effect === "glitch") {
+      fx.glitchSeed = Math.random() * 10
+      glitchAnim.restart()
+    }
   }
   NumberAnimation { id: ringAnim; target: fx; property: "ring"; from: 0; to: 1; duration: 650; easing.type: Easing.OutCubic }
+  NumberAnimation { id: glitchAnim; target: fx; property: "glitchT"; from: 0; to: 1; duration: 320 }
 
   // Lift: the shadow stays on the floor while the content rises.
   Rectangle {
@@ -97,6 +107,34 @@ Item {
     Item {
       id: body
       anchors.fill: parent
+    }
+
+    // Glitch: replaces the content while the burst runs. Reads a margin
+    // around it too, so parts drawn past its edges split along with it.
+    Loader {
+      id: glitchLoader
+      readonly property real bleed: Math.round(fx.minSide * 0.15)
+      active: fx.effect === "glitch"
+      anchors.fill: parent
+      anchors.margins: -bleed
+      sourceComponent: Item {
+        ShaderEffectSource {
+          id: glitchSource
+          visible: false
+          sourceItem: body
+          sourceRect: Qt.rect(-glitchLoader.bleed, -glitchLoader.bleed, glitchLoader.width, glitchLoader.height)
+          hideSource: fx.glitching
+          live: true
+        }
+        ShaderEffect {
+          anchors.fill: parent
+          visible: fx.glitching
+          property variant source: glitchSource
+          property real t: fx.glitchT
+          property real seed: fx.glitchSeed
+          fragmentShader: Qt.resolvedUrl("../shaders/hoverglitch.frag.qsb")
+        }
+      }
     }
   }
 }
