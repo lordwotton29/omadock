@@ -53,6 +53,17 @@ Item {
     return root ? my < -(root.iconSlot * 0.75) : false
   }
 
+  // Over the running apps that are not pinned: from the divider before
+  // them to the gap after the last one.
+  function overRunningAt(rx) {
+    var n = runningRepeater.count
+    var first = n > 0 ? runningRepeater.itemAt(0) : null
+    var last = n > 0 ? runningRepeater.itemAt(n - 1) : null
+    if (!first || !last) return false
+    var start = separator.visible ? separator.x : first.x - row.spacing / 2
+    return rx >= start && rx <= last.x + last.width + row.spacing / 2
+  }
+
   function handleDragMoved(aid, mx, my) {
     if (!root) return
     root.dropBeforeId = ""
@@ -61,8 +72,10 @@ Item {
     root.dragPointerX = mx
     root.dragPointerY = my
 
-    // Only a pin can be taken off; a running app that is not pinned stays.
-    root.dragRemoveArmed = root.dragSourceGroupId === "" && DockModel.isPinned(root.pinnedIds, aid) && cardWrapper.offDockAt(my)
+    // Only a pin can be taken off, by pulling it up off the dock or over to
+    // the running apps; a running app that is not pinned stays.
+    root.dragRemoveArmed = root.dragSourceGroupId === "" && DockModel.isPinned(root.pinnedIds, aid)
+      && (cardWrapper.offDockAt(my) || cardWrapper.overRunningAt(mx - row.x))
     if (root.dragRemoveArmed) return
 
     // Over the middle of a group: add to it. Over the middle of another
@@ -88,6 +101,14 @@ Item {
     }
 
     var idx = cardWrapper.rowInsertIndex(rx)
+    // Past the end of the run, a running app that is not pinned lands after
+    // the last item only while the pointer stays next to it: further right
+    // it is over the running apps, its own place, where letting go does
+    // nothing.
+    if (idx === n && !DockModel.isPinned(root.pinnedIds, aid)) {
+      var last = pinnedRowRepeater.itemAt(n - 1)
+      if (!last || rx > last.x + last.width + root.iconSlot / 2) idx = -1
+    }
     root.dropRowIndex = idx
     if (idx < 0) return
     root.dropIndicatorX = cardWrapper.rowIndicatorX(idx)
@@ -156,15 +177,14 @@ Item {
       } else if (targetAppId !== "" && targetAppId !== dragId) {
         root.createAppGroupFromDrop(targetAppId, dragId)
       } else {
-        var isAlreadyPinned = Boolean(root.pinnedIds && root.pinnedIds.indexOf(dragId) >= 0)
         var rowNow = root.pinnedRow
         if (sourceGroupId !== "") {
           // Out of an open group: the group has just changed under the drag,
           // so place the app by pin order alone.
           root.setPinned(DockModel.reorderPinned(root.pinnedIds, dragId, beforeId))
-        } else if (rowIdx >= 0 && (isAlreadyPinned || rowIdx < rowNow.length)) {
-          // A pinned app moves within the run; a running one dropped before
-          // any item of it gets pinned there. Groups keep their places.
+        } else if (rowIdx >= 0) {
+          // A pinned app moves within the run; a running one dropped in it
+          // gets pinned there. Groups keep their places.
           var from = -1
           for (var r = 0; r < rowNow.length; r++) {
             if (rowNow[r].kind === "app" && rowNow[r].appId === dragId) { from = r; break }
