@@ -803,6 +803,7 @@ Item {
   // passes a single property.
   readonly property var hoverFx: ({
     effect: root.hoverEffect,
+    reveal: root.iconHoverOriginal && root.iconHoverReveal,
     glow: Color.accent
   })
   property bool launchBounce: true
@@ -910,6 +911,9 @@ Item {
   property real iconStrength: 1
   // With an icon style on: show the hovered icon as shipped.
   property bool iconHoverOriginal: false
+  // With iconHoverOriginal: the original dithers in cell by cell, rising
+  // from the bottom, instead of replacing the styled icon at once.
+  property bool iconHoverReveal: false
   // The mono / dots ink, kept readable against what sits behind the icons
   // (see readableOn): an accent tint over a theme gradient built from that
   // same accent would otherwise vanish into it.
@@ -2128,6 +2132,7 @@ Item {
     root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
     root.iconTint = (parsed && (parsed.iconTint === "accent" || parsed.iconTint === "bw")) ? parsed.iconTint : "text"
     root.iconHoverOriginal = parsed ? parsed.iconHoverOriginal === true : false
+    root.iconHoverReveal = parsed ? parsed.iconHoverReveal === true : false
     root.iconContrast = parsed && typeof parsed.iconContrast === "number" ? Math.max(0, Math.min(1, parsed.iconContrast)) : 0
     root.iconStrength = parsed && typeof parsed.iconStrength === "number" ? Math.max(0, Math.min(1, parsed.iconStrength)) : 1
     root.iconGrid = parsed && typeof parsed.iconGrid === "number"
@@ -3426,6 +3431,7 @@ Item {
     conf.iconStyle = root.iconStyle
     conf.iconTint = root.iconTint
     conf.iconHoverOriginal = root.iconHoverOriginal
+    conf.iconHoverReveal = root.iconHoverReveal
     conf.iconContrast = root.iconContrast
     conf.iconStrength = root.iconStrength
     conf.iconGrid = root.iconGrid
