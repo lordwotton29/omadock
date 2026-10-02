@@ -18,9 +18,7 @@ Item {
   readonly property alias dockCard: dockCardComp.dockCard
   readonly property alias cardHover: dockCardComp.cardHover
   readonly property alias hitboxHover: dockCardComp.hitboxHover
-  readonly property alias pinnedRepeater: dockCardComp.pinnedRepeater
   readonly property alias minimizedTilesRepeater: dockCardComp.minimizedTilesRepeater
-  readonly property alias runningRepeater: dockCardComp.runningRepeater
   readonly property alias foldersRepeater: dockCardComp.foldersRepeater
   readonly property alias contextMenu: contextMenuComp
   readonly property alias folderStackPopover: folderStackPopoverComp
@@ -416,11 +414,24 @@ Item {
   // exist, so it doubles as the right tile divider.
   readonly property bool hasSeparator: (root.pinnedSection.length > 0 || root.hasTiles) && root.visibleRunningCount > 0
   readonly property real gapWidth: Style.space(root.itemSpacing)
-  readonly property real separatorWidth: Style.space(1)
+  // Split sections turn each separator into the gap between two panels. Each
+  // panel reaches the card padding past its outer icons, so the separator
+  // slot is sized to leave the chosen visible gap between the panels.
+  readonly property real sectionGap: Style.space(root.sectionSpacing)
+  // Without the split, a divider's slot gets half the margin an icon has
+  // inside its own slot on each side. Squeezed against its neighbours, the
+  // line made every difference in icon width show; with the full margin it
+  // stood too far apart. Half sits between the two.
+  readonly property real separatorWidth: root.splitSections
+    ? Math.max(Style.space(1), root.sectionGap + 2 * root.baseRowLeft - 2 * root.gapWidth)
+    : Style.space(1) + Math.round((root.iconSlot - root.baseIconArt) / 2)
   readonly property int groupSlots: (root.appGroups && DockModel.isList(root.appGroups)) ? root.appGroups.length : 0
   readonly property int folderSlots: root.pinnedFolders ? root.pinnedFolders.length : 0
   readonly property int driveSlots: (root.showRemovableDrives && root.mountedDrives) ? root.mountedDrives.length : 0
   readonly property bool hasFolderSeparator: (root.folderSlots > 0 || root.driveSlots > 0) && (root.pinnedSection.length > 0 || root.groupSlots > 0 || root.hasTiles || root.visibleRunningCount > 0)
+  // Folders | drives divider: drives come and go with the hardware, so they
+  // get a section of their own instead of trailing the pinned folders.
+  readonly property bool hasDriveSeparator: root.folderSlots > 0 && root.driveSlots > 0
 
   // Minimized-window preview tiles (macOS-style section on the dock's right).
   // In minimizeMode "all", a parked app's windows compress into ONE stacked
@@ -467,12 +478,14 @@ Item {
   readonly property int elementTotal: root.visibleSlotTotal
     + (root.hasSeparator ? 1 : 0)
     + (root.hasFolderSeparator ? 1 : 0)
+    + (root.hasDriveSeparator ? 1 : 0)
     + (root.hasLeftTileSeparator ? 1 : 0)
     + (root.hasTiles ? root.tileCount : 0)
 
   readonly property real baseRowWidth: root.visibleSlotTotal * root.iconSlot
     + (root.hasSeparator ? root.separatorWidth : 0)
     + (root.hasFolderSeparator ? root.separatorWidth : 0)
+    + (root.hasDriveSeparator ? root.separatorWidth : 0)
     + (root.hasLeftTileSeparator ? root.separatorWidth : 0)
     + (root.hasTiles ? root.tileCount * root.tileWidth : 0)
     + Math.max(0, root.elementTotal - 1) * root.gapWidth
@@ -522,17 +535,25 @@ Item {
     return (0.2126 * value.r + 0.7152 * value.g + 0.0722 * value.b) > 0.5
   }
 
-  // Corner radius for the dock card. "rounded" tracks the card's own height, so
-  // the panel keeps the same visual softness at any icon size.
+  // Corner radius for the dock card. An automatic "rounded" tracks the card's
+  // own height, so the panel keeps the same visual softness at any icon size.
+  readonly property real cardRadiusHeight: dockCard.height > 0 ? dockCard.height : (root.iconSlot + Style.space(10))
+  readonly property int autoRoundedRadius: Math.max(Style.space(14), Math.min(Style.space(28), Math.round(root.cardRadiusHeight * 0.26)))
+  // A hand-set "rounded" radius stays a few pixels short of a pill, which is
+  // a shape of its own.
+  readonly property int maxRoundedRadius: Math.max(2, Math.floor(root.cardRadiusHeight / 2) - 4)
+  readonly property int roundedRadius: root.cornerRadius >= 0
+    ? Math.max(2, Math.min(root.maxRoundedRadius, root.cornerRadius))
+    : root.autoRoundedRadius
   readonly property int effectiveCardRadius: {
-    var h = dockCard.height > 0 ? dockCard.height : (root.iconSlot + Style.space(10))
+    var h = root.cardRadiusHeight
     if (root.dockShape === "round" || root.dockShape === "pill") return Math.round(h / 2)
     if (root.dockShape === "square") return 0
     if (root.dockShape === "theme" || root.dockShape === "auto") {
       var n = Style.cornerRadius
       return (typeof n === "number" && isFinite(n) && n >= 0) ? n : Math.max(14, Style.space(14))
     }
-    return Math.max(Style.space(14), Math.min(Style.space(28), Math.round(h * 0.26)))
+    return root.roundedRadius
   }
 
   function cardRadius(height) {
@@ -576,6 +597,26 @@ Item {
   property var minimizedWindows: []
   property string _minimizedSig: ""
   readonly property var pinnedSection: root.dockModel.pinned || []
+  // Pinned apps and app groups in dock order (DockModel.pinnedRow).
+  readonly property var pinnedRow: DockModel.pinnedRow(root.pinnedSection, root.appGroups)
+
+  // Keys and lookups for the keyed Repeater models (KeyedListModel), which
+  // keep the delegates of items that stay when these lists are replaced.
+  function pinnedRowKey(item) {
+    return item.kind === "group" ? "group:" + item.id : "app:" + item.appId
+  }
+  readonly property var pinnedRowKeys: root.pinnedRow.map(root.pinnedRowKey)
+  readonly property var pinnedRowByKey: {
+    var map = {}
+    for (var i = 0; i < root.pinnedRow.length; i++) map[root.pinnedRowKey(root.pinnedRow[i])] = root.pinnedRow[i]
+    return map
+  }
+  readonly property var runningKeys: root.runningSection.map(function(e) { return e.appId })
+  readonly property var runningByKey: {
+    var map = {}
+    for (var i = 0; i < root.runningSection.length; i++) map[root.runningSection[i].appId] = root.runningSection[i]
+    return map
+  }
   readonly property var runningSection: root.dockModel.running || []
   readonly property var groupedSection: root.dockModel.grouped || []
 
@@ -680,6 +721,22 @@ Item {
   property string dropTargetGroupId: ""
   property string dragSourceGroupId: ""
   property real dropIndicatorX: 0
+  // Pinned folders and app groups are dragged too: folders to reorder them,
+  // and either one off the dock to take it away.
+  property string dragFolderPath: ""
+  property string dragGroupId: ""
+  // Insert index among the pinned folders for the dragged folder; -1 while
+  // the pointer is outside the folder section.
+  property int dropFolderIndex: -1
+  // Insert index in pinnedRow for a pinned app or group being dragged;
+  // -1 while the pointer is outside the pinned run.
+  property int dropRowIndex: -1
+  // The drag has been pulled up off the dock: letting go unpins or removes.
+  property bool dragRemoveArmed: false
+  // Pointer of the drag in progress, in dock card coordinates.
+  property real dragPointerX: 0
+  property real dragPointerY: 0
+  readonly property bool dockDragActive: root.dragAppId !== "" || root.dragFolderPath !== "" || root.dragGroupId !== ""
 
   // ------------------------------------------------- context menu
 
@@ -752,6 +809,9 @@ Item {
     return Math.max(0.0, Math.min(1.0, root.dockOpacity))
   }
   property string dockShape: "rounded"
+  // Corner radius for the "rounded" shape in logical pixels, set by hand in
+  // Settings; negative keeps the automatic one that follows the dock height.
+  property int cornerRadius: -1
   property string dockBgColor: "theme"
   property bool showBackground: true
   // Background fill: "solid" (dockBgColor) or "gradient" (below).
@@ -820,6 +880,9 @@ Item {
   // Static film grain over the background card, 0 (off) .. 1.
   property real grain: 0
   property bool showShadow: true
+  // Draw each section of the dock (the parts between separators) as its own
+  // panel, with a gap where the separator line would be.
+  property bool splitSections: false
   // Shadow opacity, 0..1.
   property real shadowStrength: 0.4
   // Compositor blur behind the dock: "system" leaves it to the user's own
@@ -879,6 +942,23 @@ Item {
     return custom.charAt(0) === "#" ? Qt.color(custom) : base
   }
 
+  // Divider lines: the backdrop mixed toward black or white, whichever
+  // contrasts more, just far enough to be seen and no further. A fixed tint
+  // of the text colour all but vanished on light docks. A light line on a
+  // dark dock reads at a lower ratio than a dark one on a light dock, and
+  // glares sooner, so it stops earlier.
+  readonly property color dividerColor: {
+    var bg = Qt.color(root.iconBackdropColor)
+    var ink = root.blackOrWhiteOn(bg)
+    var target = ink.hslLightness > 0.5 ? 1.4 : 1.6
+    var c = bg
+    for (var t = 0.04; t <= 0.6; t += 0.02) {
+      c = Qt.rgba(bg.r + (ink.r - bg.r) * t, bg.g + (ink.g - bg.g) * t, bg.b + (ink.b - bg.b) * t, 1)
+      if (root.contrastRatio(c, bg) >= target) break
+    }
+    return c
+  }
+
   // WCAG relative luminance and contrast ratio.
   function luminance(c) {
     function lin(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
@@ -933,7 +1013,34 @@ Item {
   property int themeVersion: 0
   property string currentIconThemeName: "Yaru"
   property string folderColor: "theme"
+  // Colour for symbolic folder and drive icons in the original icon style,
+  // on the dock's own backdrop.
+  readonly property color symbolicIconColor: root.symbolicColorOn(root.iconBackdropColor)
+
+  // Symbolic icon colour over a given backdrop: white or black when set,
+  // for "bw" whichever of the two contrasts more with that backdrop (so a
+  // folder can be dark on the dock and light in a dark stack popup), and
+  // otherwise white or black to suit the theme.
+  function symbolicColorOn(backdrop) {
+    var c
+    if (root.folderColor === "white") c = Qt.color("#ffffff")
+    else if (root.folderColor === "black") c = Qt.color("#111111")
+    else if (root.folderColor === "bw") c = root.blackOrWhiteOn(backdrop)
+    else c = Qt.color((Color.bar.background.hslLightness < 0.5 || Color.background.hslLightness < 0.5) ? "#ffffff" : "#111111")
+    // Pure white glares next to the app icons; mix a little of the backdrop
+    // into light glyphs so they sit in the panel instead.
+    if (c.hslLightness > 0.5) {
+      var bg = Qt.color(backdrop)
+      var k = root.symbolicLightSoftening
+      c = Qt.rgba(c.r + (bg.r - c.r) * k, c.g + (bg.g - c.g) * k, c.b + (bg.b - c.b) * k, 1)
+    }
+    return c
+  }
+  // Share of the backdrop mixed into light symbolic glyphs.
+  readonly property real symbolicLightSoftening: 0.25
   property int itemSpacing: 4
+  // Gap between the panels when sections are split.
+  property int sectionSpacing: 18
   property string minimizeMode: "active"
   readonly property bool clickToMinimize: root.minimizeMode !== "off"
   property bool showUrgentHint: true
@@ -1293,12 +1400,20 @@ Item {
       folderName = targetEntry.name + " & more"
     }
 
+    // The group takes the place of the app it was dropped on.
+    var pinsNow = root.pinnedIds || []
+    var at = pinsNow.indexOf(targetAppId)
+    var anchor = ""
+    for (var n = at + 1; at >= 0 && n < pinsNow.length; n++) {
+      if (pinsNow[n] !== targetAppId && pinsNow[n] !== draggedAppId) { anchor = pinsNow[n]; break }
+    }
     var newGroup = {
       id: "group_" + Date.now(),
       name: folderName,
       icon: "folder",
       apps: [targetAppId, draggedAppId],
-      cols: 3
+      cols: 3,
+      before: anchor
     }
     root.appGroups = (root.appGroups || []).concat([newGroup])
 
@@ -1323,7 +1438,7 @@ Item {
       if (g && g.id === groupId) {
         var curApps = DockModel.toArray(g.apps)
         if (curApps.indexOf(appId) < 0) curApps.push(appId)
-        next.push({ id: g.id, name: g.name, icon: g.icon, apps: curApps, cols: g.cols || 3 })
+        next.push({ id: g.id, name: g.name, icon: g.icon, apps: curApps, cols: g.cols || 3, before: g.before || "" })
       } else {
         next.push(g)
       }
@@ -1347,7 +1462,7 @@ Item {
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i]
       if (g && g.id === groupId) {
-        next.push({ id: g.id, name: newName.trim(), icon: g.icon, apps: g.apps, cols: g.cols || 3 })
+        next.push({ id: g.id, name: newName.trim(), icon: g.icon, apps: g.apps, cols: g.cols || 3, before: g.before || "" })
       } else {
         next.push(g)
       }
@@ -1371,7 +1486,7 @@ Item {
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i]
       if (g && g.id === groupId) {
-        next.push({ id: g.id, name: g.name, icon: g.icon, apps: g.apps, cols: c })
+        next.push({ id: g.id, name: g.name, icon: g.icon, apps: g.apps, cols: c, before: g.before || "" })
       } else {
         next.push(g)
       }
@@ -1399,7 +1514,7 @@ Item {
         }
         remainingApps = filtered
         if (filtered.length > 1) {
-          next.push({ id: g.id, name: g.name, icon: g.icon, apps: filtered, cols: g.cols || 3 })
+          next.push({ id: g.id, name: g.name, icon: g.icon, apps: filtered, cols: g.cols || 3, before: g.before || "" })
         }
       } else {
         next.push(g)
@@ -1499,7 +1614,7 @@ Item {
       return
     }
 
-    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dragAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen || root.externalDragOver || root.appDropTargetId !== ""
+    var isHovered = (root.cardHover && root.cardHover.hovered) || (root.hitboxHover && root.hitboxHover.hovered) || (revealHover && revealHover.hovered) || root.contextAppId !== "" || root.dockDragActive || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.settingsPanelOpen || root.externalDragOver || root.appDropTargetId !== ""
 
     // Hovered, Context Menu Open, or Dragging: keep visible
     if (isHovered) {
@@ -1565,21 +1680,15 @@ Item {
     id: configReloadDebounce
     interval: 120
     repeat: false
-    onTriggered: {
-      configFile.reload()
-      root.loadConfig()
-      root.scanRemovableDrives()
-    }
+    // The read is asynchronous; onLoaded applies it once it lands.
+    onTriggered: configFile.reload()
   }
 
   Timer {
     id: dockReloadDebounce
     interval: 120
     repeat: false
-    onTriggered: {
-      dockFile.reload()
-      root.loadPinned()
-    }
+    onTriggered: dockFile.reload()
   }
 
   CappedFileView {
@@ -1615,10 +1724,7 @@ Item {
     maxBytes: DockModel.MAX_ICONS_THEME_BYTES
     watchChanges: true
     onLoaded: root.handleThemeChanged()
-    onFileChanged: {
-      themeIconsFile.reload()
-      root.handleThemeChanged()
-    }
+    onFileChanged: themeIconsFile.reload()
   }
 
   CappedFileView {
@@ -1627,10 +1733,7 @@ Item {
     maxBytes: DockModel.MAX_COLORS_TOML_BYTES
     watchChanges: true
     onLoaded: root.handleThemeChanged()
-    onFileChanged: {
-      themeColorsFile.reload()
-      root.handleThemeChanged()
-    }
+    onFileChanged: themeColorsFile.reload()
   }
 
   CappedFileView {
@@ -1998,6 +2101,7 @@ Item {
       root.borderOpacity = -1.0
     }
     root.dockShape = parsed && typeof parsed.shape === "string" ? parsed.shape : "rounded"
+    root.cornerRadius = parsed && typeof parsed.cornerRadius === "number" ? Math.max(2, Math.round(parsed.cornerRadius)) : -1
     root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
     root.showBackground = parsed ? parsed.showBackground !== false : true
     root.bgFill = (parsed && parsed.bgFill === "gradient") ? "gradient" : "solid"
@@ -2005,6 +2109,7 @@ Item {
     root.gradientStrength = parsed && typeof parsed.gradientStrength === "number" ? Math.max(0, Math.min(1, parsed.gradientStrength)) : 0.6
     root.grain = parsed && typeof parsed.grain === "number" ? Math.max(0, Math.min(1, parsed.grain)) : 0
     root.showShadow = parsed ? parsed.showShadow !== false : true
+    root.splitSections = parsed ? parsed.splitSections === true : false
     root.shadowStrength = parsed && typeof parsed.shadowStrength === "number"
       ? Math.max(0, Math.min(1, parsed.shadowStrength))
       : 0.4
@@ -2030,6 +2135,7 @@ Item {
     root.groupIconEffects = (parsed && parsed.groupIconEffects === "none") ? "none" : "theme"
     root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
     root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
+    root.sectionSpacing = parsed && typeof parsed.sectionSpacing === "number" ? Math.max(0, Math.min(48, Math.round(parsed.sectionSpacing))) : 18
     if (parsed && typeof parsed.minimizeMode === "string") {
       root.minimizeMode = parsed.minimizeMode
     } else if (parsed && parsed.clickToMinimize === true) {
@@ -2083,6 +2189,7 @@ Item {
     if (!colorId || colorId === "theme" || colorId === "auto") return "Auto (Theme)"
     if (colorId === "white") return "White"
     if (colorId === "black") return "Black"
+    if (colorId === "bw") return "Black or white"
     var map = {
       "Yaru-sage": "Sage Green",
       "Yaru-olive": "Olive",
@@ -3229,6 +3336,8 @@ Item {
     conf.opacity = root.dockOpacity < 0 ? "theme" : root.dockOpacity
     conf.borderOpacity = root.borderOpacity < 0 ? "theme" : root.borderOpacity
     conf.shape = root.dockShape
+    if (root.cornerRadius >= 0) conf.cornerRadius = root.cornerRadius
+    else delete conf.cornerRadius
     conf.bgColor = root.dockBgColor
     conf.showBackground = root.showBackground
     conf.bgFill = root.bgFill
@@ -3236,6 +3345,7 @@ Item {
     conf.gradientStrength = root.gradientStrength
     conf.grain = root.grain
     conf.showShadow = root.showShadow
+    conf.splitSections = root.splitSections
     conf.shadowStrength = root.shadowStrength
     conf.blur = root.blurMode
     if (root.blurSize > 0) conf.blurSize = root.blurSize
@@ -3254,6 +3364,7 @@ Item {
     conf.groupIconEffects = root.groupIconEffects
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
+    conf.sectionSpacing = root.sectionSpacing
     conf.minimizeMode = root.minimizeMode
     conf.clickToMinimize = root.minimizeMode !== "off"
     conf.showUrgentHint = root.showUrgentHint
@@ -3420,8 +3531,23 @@ Item {
   }
 
   function setPinned(next) {
+    // A group standing before an app that is no longer pinned moves before
+    // the next one that is, instead of dropping to the end.
+    var groups = DockModel.reanchorGroups(root.appGroups, root.pinnedIds, next)
     root.pinnedIds = next
     dockFile.setText(DockModel.serializePinned(next))
+    if (groups !== root.appGroups) {
+      root.appGroups = groups
+      root.saveConfig()
+    }
+  }
+
+  // Puts pinned apps and app groups in the order of a pinnedRow.
+  function applyPinnedRow(row) {
+    var state = DockModel.rowState(row, root.pinnedIds)
+    root.appGroups = state.groups
+    root.setPinned(state.pins)
+    root.saveConfig()
   }
 
   function togglePin(appId) {
@@ -3738,6 +3864,31 @@ Item {
     root.saveConfig()
   }
 
+  // Move an app group within the pinned run, or a pinned folder among the
+  // folders, so it lands before the item now at insertIndex (the end when
+  // insertIndex is past the last one).
+  function moveAppGroup(groupId, insertIndex) {
+    var row = root.pinnedRow
+    var from = -1
+    for (var i = 0; i < row.length; i++) {
+      if (row[i].kind === "group" && row[i].id === groupId) { from = i; break }
+    }
+    var next = DockModel.moveBefore(row, from, insertIndex)
+    if (next !== row) root.applyPinnedRow(next)
+  }
+
+  function moveFolder(path, insertIndex) {
+    var list = root.pinnedFolders || []
+    var from = -1
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].path === path) { from = i; break }
+    }
+    var next = DockModel.moveBefore(list, from, insertIndex)
+    if (next === list) return
+    root.pinnedFolders = next
+    root.saveConfig()
+  }
+
   // Widest piece of content in the open menu. Only implicit widths are read, so
   // feeding the result back into every row cannot loop.
   function menuContentWidth(item) {
@@ -3870,8 +4021,8 @@ Item {
     // Global dismiss area - catches clicks outside context menu, folder stack, or app group popup
     Item {
       id: globalDismiss
-      width: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dragAppId !== "") ? dockWindow.width : 0
-      height: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dragAppId !== "") ? dockWindow.height : 0
+      width: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dockDragActive) ? dockWindow.width : 0
+      height: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dockDragActive) ? dockWindow.height : 0
 
       MouseArea {
         anchors.fill: parent
@@ -3899,6 +4050,7 @@ Item {
             root.dropTargetAppId = ""
             root.dropTargetGroupId = ""
             root.dragSourceGroupId = ""
+            root.dragRemoveArmed = false
             root.syncVisibility()
           }
         }

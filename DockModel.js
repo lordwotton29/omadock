@@ -383,9 +383,100 @@ function boundAppGroups(arr) {
       name: name || "Group",
       icon: _boundedStr(g.icon, MAX_APP_GROUP_ICON) || "folder",
       apps: apps,
-      cols: Math.max(1, Math.min(6, Math.round(Number(g.cols) || 3)))
+      cols: Math.max(1, Math.min(6, Math.round(Number(g.cols) || 3))),
+      // Pinned app the group stands before in the dock; "" for the end.
+      before: _boundedStr(g.before, MAX_APP_GROUP_ID) || ""
     }
   })
+}
+
+// ---------------------------------------------------------------- pinned row
+// Pinned apps and app groups share one run of the dock. Pins keep their own
+// order (pinnedIds); each group records the pinned app it stands before
+// (group.before, "" for the end of the run).
+
+// The run in dock order: { kind: "app", appId, entry } and { kind: "group",
+// id, group } items. Groups whose app is not in entries go to the end; groups
+// before the same app keep their order in groups.
+function pinnedRow(entries, groups) {
+  var apps = toArray(entries)
+  var list = toArray(groups)
+  var present = {}
+  for (var i = 0; i < apps.length; i++) if (apps[i]) present[apps[i].appId] = true
+  var byAnchor = {}
+  var tail = []
+  for (var g = 0; g < list.length; g++) {
+    var grp = list[g]
+    if (!grp) continue
+    var item = { kind: "group", id: grp.id, group: grp }
+    var anchor = grp.before || ""
+    if (anchor && present[anchor]) (byAnchor[anchor] = byAnchor[anchor] || []).push(item)
+    else tail.push(item)
+  }
+  var row = []
+  for (var a = 0; a < apps.length; a++) {
+    var e = apps[a]
+    if (!e) continue
+    var before = byAnchor[e.appId] || []
+    for (var b = 0; b < before.length; b++) row.push(before[b])
+    row.push({ kind: "app", appId: e.appId, entry: e })
+  }
+  return row.concat(tail)
+}
+
+// Pins and groups that put the dock in the order of row: pins in row order
+// (with any pinned id the row does not show kept at the end), and each group
+// standing before the next app after it in the row.
+function rowState(row, pinnedIds) {
+  var items = toArray(row)
+  var pins = []
+  var groups = []
+  var pending = []
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i]
+    if (!it) continue
+    if (it.kind === "app") {
+      pins.push(it.appId)
+      for (var p = 0; p < pending.length; p++) pending[p].before = it.appId
+      pending = []
+    } else if (it.kind === "group") {
+      var copy = {}
+      for (var k in it.group) copy[k] = it.group[k]
+      copy.before = ""
+      groups.push(copy)
+      pending.push(copy)
+    }
+  }
+  var shown = {}
+  for (var s = 0; s < pins.length; s++) shown[pins[s]] = true
+  var ids = toArray(pinnedIds)
+  for (var r = 0; r < ids.length; r++) if (!shown[ids[r]]) pins.push(ids[r])
+  return { pins: pins, groups: groups }
+}
+
+// Groups re-anchored for a change of pins: a group whose app is no longer
+// pinned moves before the next app after it in oldPins that still is.
+function reanchorGroups(groups, oldPins, newPins) {
+  var list = toArray(groups)
+  var older = toArray(oldPins)
+  var kept = {}
+  var newer = toArray(newPins)
+  for (var n = 0; n < newer.length; n++) kept[newer[n]] = true
+  var changed = false
+  var out = list.map(function(g) {
+    if (!g || !g.before || kept[g.before]) return g
+    var from = older.indexOf(g.before)
+    var anchor = ""
+    for (var i = from + 1; from >= 0 && i < older.length; i++) {
+      if (kept[older[i]]) { anchor = older[i]; break }
+    }
+    var copy = {}
+    for (var k in g) copy[k] = g[k]
+    copy.before = anchor
+    changed = true
+    return copy
+  })
+  return changed ? out : list
 }
 
 // Persisted pinned folders: drop malformed entries, cap counts and lengths.
@@ -468,6 +559,20 @@ function reorderPinned(pinnedIds, appId, insertBeforeId) {
     else arr.splice(toIdx, 0, id)
   }
   return arr
+}
+
+// A copy of list with the item at from moved before the item now at
+// insertIndex (to the end when insertIndex is past the last item). Returns
+// list itself when nothing moves.
+function moveBefore(list, from, insertIndex) {
+  var arr = toArray(list)
+  if (from < 0 || from >= arr.length) return list
+  var to = Math.max(0, Math.min(arr.length, insertIndex))
+  if (to === from || to === from + 1) return list
+  var next = arr.slice()
+  var moved = next.splice(from, 1)[0]
+  next.splice(to > from ? to - 1 : to, 0, moved)
+  return next
 }
 
 function entryFor(appRows, appId) {
@@ -849,7 +954,7 @@ function resolveThemedFolderIcon(iconName, themeName, folderColorMode, appLibrar
   // Explicit white, black, or symbolic mode — deliberately monochrome Adwaita outlines.
   // These are intentionally hardcoded for B&W Omarchy themes (vantablack, white, etc.)
   // and must NOT be intercepted by the iconIndex which may return colored variants.
-  if (folderColorMode === "white" || folderColorMode === "black" || folderColorMode === "symbolic") {
+  if (folderColorMode === "white" || folderColorMode === "black" || folderColorMode === "bw" || folderColorMode === "symbolic") {
     return "file:///usr/share/icons/Adwaita/symbolic/places/" + name + "-symbolic.svg"
   }
 
@@ -967,9 +1072,29 @@ function resolveAppName(appLibrary, appRows, appId) {
   return id
 }
 
-function resolveDriveIcon(iconName, themeName, appLibrary) {
+function resolveDriveIcon(iconName, themeName, appLibrary, folderColorMode) {
   var name = String(iconName || "drive-removable-media-usb").trim()
   if (name.indexOf("/") === 0 || name.indexOf("file://") === 0) return name
+
+  // Drives follow the folder colour, so they sit next to the folders in the
+  // same style: wherever folders use Adwaita's monochrome outlines (white,
+  // black, black-or-white or symbolic, or a theme with no Yaru colour),
+  // drives do too.
+  var theme = String(themeName || "").trim()
+  var yaruTheme = theme === "Yaru" || (theme.indexOf("Yaru-") === 0 && theme !== "Yaru-gray" && theme !== "Yaru-grey")
+  var mode = String(folderColorMode || "theme")
+  if (mode === "white" || mode === "black" || mode === "bw" || mode === "symbolic"
+      || ((mode === "theme" || mode === "auto") && !yaruTheme)) {
+    var symbolicMap = {
+      "drive-removable-media-usb": "media-removable",
+      "usb-pendrive": "media-removable",
+      "drive-removable-media": "drive-removable-media",
+      "media-removable": "media-removable",
+      "drive-harddisk-usb": "drive-harddisk-usb",
+      "media-optical": "media-optical"
+    }
+    return "file:///usr/share/icons/Adwaita/symbolic/devices/" + (symbolicMap[name] || "drive-removable-media") + "-symbolic.svg"
+  }
 
   // Try iconIndex/theme resolution first for theme resilience
   if (appLibrary) {

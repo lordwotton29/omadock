@@ -804,6 +804,22 @@ PanelWindow {
               }
               onPicked: function(v) { root.setDockShape(v) }
             }
+            SliderRow {
+              label: "Corner radius"
+              visible: root ? root.dockShape === "rounded" : false
+              minimum: 2
+              maximum: root ? root.maxRoundedRadius : 24
+              step: 1
+              suffix: " px"
+              value: root ? root.roundedRadius : 14
+              onCommitted: function(v) { root.setOption("cornerRadius", Math.round(v)) }
+            }
+            SwitchRow {
+              label: "Split sections"
+              hint: "Each part between the dividers becomes its own panel, with a gap in place of the divider."
+              checked: root ? root.splitSections : false
+              onToggled: root.setOption("splitSections", !root.splitSections)
+            }
             ChoiceRow {
               label: "Indicators"
               hint: "The dots and bars under icons. Theme follows the corners above."
@@ -1122,6 +1138,17 @@ PanelWindow {
               value: root ? root.itemSpacing : 4
               onCommitted: function(v) { root.setItemSpacing(Math.round(v)) }
             }
+            SliderRow {
+              label: "Panel spacing"
+              hint: "Gap between the panels when sections are split."
+              visible: root ? root.splitSections : false
+              minimum: 0
+              maximum: 48
+              step: 1
+              suffix: " px"
+              value: root ? root.sectionSpacing : 18
+              onCommitted: function(v) { root.setOption("sectionSpacing", Math.round(v)) }
+            }
           }
 
           // ================================================= Folders
@@ -1201,6 +1228,16 @@ PanelWindow {
                 bordered: true
                 selected: root ? (root.folderColor === "theme" || !root.folderColor) : true
                 onClicked: root.setFolderColor("theme")
+              }
+
+              // Monochrome outlines in black or white, whichever reads
+              // better on what is behind them: the dock, or a stack popup.
+              Button {
+                text: "Auto B/W"
+                foreground: Color.menu.text
+                bordered: true
+                selected: root ? root.folderColor === "bw" : false
+                onClicked: root.setFolderColor("bw")
               }
 
               Repeater {
