@@ -2326,14 +2326,7 @@ Item {
   }
 
   function localPathsFromUrls(urls) {
-    var out = []
-    for (var i = 0; i < (urls ? urls.length : 0); i++) {
-      var u = String(urls[i])
-      if (u.indexOf("file://") !== 0) continue
-      var p = decodeURIComponent(u.slice(7))
-      if (p.charAt(0) === "/") out.push(p)
-    }
-    return out
+    return DockModel.localPathsFromUrls(urls)
   }
 
   function pinDroppedFolders(urls) {

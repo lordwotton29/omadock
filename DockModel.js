@@ -536,6 +536,26 @@ function boundPinnedFolders(arr) {
   })
 }
 
+// Local absolute paths from dropped file:// URLs. A path with a line break
+// is dropped: the folder probes print one path per line, so "a\n/etc"
+// would come back as two paths. Malformed escapes are skipped.
+function localPathsFromUrls(urls) {
+  var list = toArray(urls)
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var u = String(list[i])
+    if (u.indexOf("file://") !== 0) continue
+    var p
+    try {
+      p = decodeURIComponent(u.slice(7))
+    } catch (e) {
+      continue
+    }
+    if (p.charAt(0) === "/" && !/[\r\n]/.test(p)) out.push(p)
+  }
+  return out
+}
+
 function serializePinned(pinnedIds) {
   var arr = toArray(pinnedIds)
   var cleaned = []

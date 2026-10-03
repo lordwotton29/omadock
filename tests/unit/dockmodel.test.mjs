@@ -84,3 +84,15 @@ test("pinned folders must be absolute or home-relative", () => {
   ]))
   assert.deepEqual(out.map((f) => f.path), ["/srv/a", "~/b", "~"])
 })
+
+test("localPathsFromUrls decodes file URLs", () => {
+  assert.deepEqual(plain(M.localPathsFromUrls(["file:///home/u/a%20b", "https://x/y"])), ["/home/u/a b"])
+})
+
+test("localPathsFromUrls drops paths with line breaks", () => {
+  assert.deepEqual(plain(M.localPathsFromUrls(["file:///tmp/a%0A/etc", "file:///tmp/b%0D"])), [])
+})
+
+test("localPathsFromUrls skips malformed escapes and relative paths", () => {
+  assert.deepEqual(plain(M.localPathsFromUrls(["file:///bad%E0%A4%A", "file://host/x"])), [])
+})
