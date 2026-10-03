@@ -199,51 +199,45 @@ Item {
     }
   }
 
-  // Title bubble above the hovered tile (hidden while the menu is open).
-  BorderSurface {
+  // Title bubble in its own popup surface above the tile (TooltipWindow).
+  TooltipWindow {
     id: tileTooltip
-    visible: tile.tooltipShown && tile.tileHovered && !tile.tileMenuOpen && tile.tileTitle !== "" && (root ? root.showTooltips : true)
-    z: 300
-    color: Color.tooltip.background
-    borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
-    radius: Style.cornerRadius > 0 ? Style.cornerRadius : 6
-    padding: Style.space(4)
-    x: {
-      var targetWin = root ? root.contentItemRef : null
-      var localCenter = (tile.width - width) / 2
-      if (!targetWin) return localCenter
-      var pt = tile.mapToItem(targetWin, 0, 0)
-      if (!pt) return localCenter
-      var winX = pt.x + localCenter
-      var clampedWinX = Math.max(Style.gapsOut, Math.min(targetWin.width - width - Style.gapsOut, winX))
-      return clampedWinX - pt.x
-    }
-    y: -height - Style.space(6)
-    width: tileTooltipLabel.implicitWidth + contentLeftInset + contentRightInset
-    height: tooltipImplicitHeight()
+    target: tile
+    shown: tile.tooltipShown && tile.tileHovered && !tile.tileMenuOpen && tile.tileTitle !== "" && (root ? root.showTooltips : true)
+    body: tileTooltipSurface
 
-    function tooltipImplicitHeight() {
-      return tileTooltipLabel.implicitHeight + contentTopInset + contentBottomInset
-    }
+    BorderSurface {
+      id: tileTooltipSurface
+      color: Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      radius: Style.cornerRadius > 0 ? Style.cornerRadius : 6
+      padding: Style.space(4)
+      width: tileTooltipLabel.implicitWidth + contentLeftInset + contentRightInset
+      height: tooltipImplicitHeight()
 
-    Text {
-      id: tileTooltipLabel
-      x: tileTooltip.contentLeftInset
-      y: tileTooltip.contentTopInset
-      text: {
-        if (!tile.isGroup) return tile.tileTitle
-        var lines = []
-        var max = Math.min(tile.groupWins.length, 6)
-        for (var i = 0; i < max; i++) lines.push("• " + (tile.groupWins[i] ? tile.groupWins[i].title : ""))
-        if (tile.groupWins.length > 6) lines.push("+" + (tile.groupWins.length - 6) + " more")
-        return lines.join("\n")
+      function tooltipImplicitHeight() {
+        return tileTooltipLabel.implicitHeight + contentTopInset + contentBottomInset
       }
-      textFormat: Text.PlainText
-      color: Color.tooltip.text
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-      maximumLineCount: tile.isGroup ? 8 : 1
+
+      Text {
+        id: tileTooltipLabel
+        x: tileTooltipSurface.contentLeftInset
+        y: tileTooltipSurface.contentTopInset
+        text: {
+          if (!tile.isGroup) return tile.tileTitle
+          var lines = []
+          var max = Math.min(tile.groupWins.length, 6)
+          for (var i = 0; i < max; i++) lines.push("• " + (tile.groupWins[i] ? tile.groupWins[i].title : ""))
+          if (tile.groupWins.length > 6) lines.push("+" + (tile.groupWins.length - 6) + " more")
+          return lines.join("\n")
+        }
+        textFormat: Text.PlainText
+        color: Color.tooltip.text
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+        maximumLineCount: tile.isGroup ? 8 : 1
+      }
     }
   }
 
