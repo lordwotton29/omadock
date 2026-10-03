@@ -23,6 +23,7 @@ Item {
   readonly property alias contextMenu: contextMenuComp
   readonly property alias folderStackPopover: folderStackPopoverComp
   readonly property alias contentItemRef: dockWindow.contentItem
+  readonly property alias dockWindowRef: dockWindow
   readonly property alias appContextMenuColumnRef: contextMenuComp.appContextMenuColumn
   readonly property alias customFolderPickerProc: customFolderPickerProc
   readonly property alias folderStackScanner: folderStackScanner
@@ -591,6 +592,11 @@ Item {
   property var pinnedIds: []
   property var appRows: []
   property var dockModel: ({ pinned: [], running: [] })
+  // Height a popup may use above the card: the screen above the dock, less
+  // the margin the full-screen layer used to leave (Style.space(36)).
+  readonly property real popupMaxHeight: Math.max(240,
+    (root.dockScreen ? root.dockScreen.height : 1080) - Style.space(36)
+    - Style.gapsOut - (dockCardComp ? dockCardComp.dockCard.height : 0) - Style.space(16))
   // Live scan of parked windows for the preview-tile section. Built straight
   // off Hyprland's own toplevel list, so it cannot go stale the way cached
   // model primitives can.
@@ -3963,7 +3969,6 @@ Item {
     mask: Region {
       item: (root.dockVisible && dockCardComp && dockCardComp.dockHitbox) ? dockCardComp.dockHitbox : dockCardComp.dockCard
       regions: [
-        Region { item: contextMenuComp },
         Region { item: folderStackPopoverComp },
         Region { item: appGroupPopupComp },
         Region { item: revealStrip },
@@ -4076,9 +4081,18 @@ Item {
     }
 
     // ------------------------------------------------------------ context menu
-    DockContextMenu {
-      id: contextMenuComp
-      rootRef: root
+    DockPopupWindow {
+      id: contextMenuWindow
+      dockRoot: root
+      open: root.contextAppId !== ""
+      centerX: root.contextX
+      body: contextMenuComp
+      onDismissed: root.closeContext()
+
+      DockContextMenu {
+        id: contextMenuComp
+        rootRef: root
+      }
     }
   }
 
