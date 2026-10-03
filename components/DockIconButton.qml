@@ -112,6 +112,7 @@ Item {
   }
 
   HoverTooltip {
+    dockRoot: root
     text: btn.tooltip
     hovered: area.containsMouse
     showTooltips: root ? root.showTooltips : true
