@@ -49,12 +49,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qt6-declarative-dev-tools
 
-      # --silent still exits non-zero on parse errors (verified: 255 on broken
-      # QML), so this is a hard syntax gate. Typed checking against the Omarchy
+      # qmllint exits non-zero on parse errors, so this is a hard syntax gate;
+      # diagnostics stay visible in the log. Typed checking against the Omarchy
       # shell and Quickshell modules only exists on an Omarchy host — that runs
       # in the release checklist (AGENTS.md "Verification Commands").
       - name: qmllint
-        run: /usr/lib/qt6/bin/qmllint --silent Dock.qml DockHost.qml components/*.qml
+        run: /usr/lib/qt6/bin/qmllint Dock.qml DockHost.qml components/*.qml
 
   manifest:
     name: Manifest schema
