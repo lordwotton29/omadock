@@ -3969,8 +3969,6 @@ Item {
     mask: Region {
       item: (root.dockVisible && dockCardComp && dockCardComp.dockHitbox) ? dockCardComp.dockHitbox : dockCardComp.dockCard
       regions: [
-        Region { item: folderStackPopoverComp },
-        Region { item: appGroupPopupComp },
         Region { item: revealStrip },
         Region { item: globalDismiss }
       ]
@@ -4023,31 +4021,17 @@ Item {
       }
     }
 
-    // Global dismiss area - catches clicks outside context menu, folder stack, or app group popup
+    // Clears a drag released outside the card (popups dismiss through their focus grabs).
     Item {
       id: globalDismiss
-      width: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dockDragActive) ? dockWindow.width : 0
-      height: (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dockDragActive) ? dockWindow.height : 0
+      width: root.dockDragActive ? dockWindow.width : 0
+      height: root.dockDragActive ? dockWindow.height : 0
 
       MouseArea {
         anchors.fill: parent
         z: -1
         hoverEnabled: true
-        // Accept every button: the layer-shell mask routes all clicks here
-        // while a menu is open, so a right-click on empty space must dismiss
-        // the menu too instead of being swallowed with no effect.
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: function(mouse) {
-          if (root.contextAppId !== "") {
-            root.closeContext()
-          }
-          if (root.activeStackFolder !== "") {
-            root.closeFolderStack()
-          }
-          if (root.activeAppGroupId !== "") {
-            root.closeAppGroup()
-          }
-        }
         onReleased: function(mouse) {
           if (root.dragAppId !== "") {
             root.dragAppId = ""
@@ -4069,15 +4053,34 @@ Item {
     }
 
     // ------------------------------------------------------------ Folder Stack Popover
-    FolderPopup {
-      id: folderStackPopoverComp
-      rootRef: root
+    DockPopupWindow {
+      id: folderStackWindow
+      dockRoot: root
+      open: root.activeStackFolder !== "" && root.dockVisible
+      centerX: root.activeStackX
+      body: folderStackPopoverComp
+      onDismissed: root.closeFolderStack()
+
+      FolderPopup {
+        id: folderStackPopoverComp
+        rootRef: root
+      }
     }
 
     // ------------------------------------------------------------ App Group Popover
-    AppGroupPopup {
-      id: appGroupPopupComp
-      rootRef: root
+    DockPopupWindow {
+      id: appGroupWindow
+      dockRoot: root
+      open: root.activeAppGroupId !== "" && root.dockVisible
+      centerX: root.activeAppGroupX
+      body: appGroupPopupComp
+      onDismissed: root.closeAppGroup()
+
+      AppGroupPopup {
+        id: appGroupPopupComp
+        rootRef: root
+        popupWindow: appGroupWindow
+      }
     }
 
     // ------------------------------------------------------------ context menu
