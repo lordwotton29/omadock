@@ -183,7 +183,6 @@ Item {
     // survives that because it consults this index first; the fallback library
     // has to do the same or it is strictly more fragile than the host.
     property var iconIndex: ({})
-    property var pendingIconIndex: ({})
 
     function sortedEntries(query) {
       try {
@@ -240,28 +239,18 @@ Item {
       if (!iconIndexScan.running) iconIndexScan.running = true
     }
 
-    function indexIconLine(path) {
-      var value = String(path || "").trim()
-      if (value.length === 0) return
-      var slash = value.lastIndexOf("/")
-      var file = slash >= 0 ? value.slice(slash + 1) : value
-      var dot = file.lastIndexOf(".")
-      var name = dot > 0 ? file.slice(0, dot) : file
-      if (name.length > 0 && localAppLibrary.pendingIconIndex[name] === undefined)
-        localAppLibrary.pendingIconIndex[name] = value
-    }
-
-    // SVGs before PNGs so the first hit per name is the scalable one.
+    // SVGs before PNGs so the first hit per name is the scalable one; awk
+    // keeps only that first hit, so QML parses ~2 300 lines instead of ~23 600.
     function iconIndexScanCommand() {
       return [
         'dirs="$HOME/.icons $HOME/.local/share/icons";',
         'IFS=":"; for d in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do dirs="$dirs $d/icons"; done; unset IFS;',
-        'for ext in svg png; do',
+        '{ for ext in svg png; do',
         '  for base in $dirs; do',
         '    [[ -d $base ]] && find "$base" \\( -path "*/apps/*" -o -path "*/devices/*" -o -path "*/places/*" -o -path "*/mimetypes/*" \\) -name "*.$ext" 2>/dev/null;',
         '  done;',
         '  find /usr/share/pixmaps -maxdepth 1 -name "*.$ext" 2>/dev/null;',
-        'done'
+        'done; } | awk -F/ \'{ n = $NF; sub(/\\.[^.]*$/, "", n); if (!(n in seen)) { seen[n] = 1; print } }\''
       ].join(' ')
     }
 
@@ -294,10 +283,11 @@ Item {
   Process {
     id: iconIndexScan
     command: ["bash", "-c", localAppLibrary.iconIndexScanCommand()]
-    stdout: SplitParser { onRead: function (line) { localAppLibrary.indexIconLine(line) } }
-    onStarted: localAppLibrary.pendingIconIndex = ({})
+    // One collected read, parsed once: a callback per line cost ~23 600
+    // GUI-thread calls on every start and theme change.
+    stdout: StdioCollector { id: iconIndexOut; waitForEnd: true }
     onExited: {
-      localAppLibrary.iconIndex = localAppLibrary.pendingIconIndex
+      localAppLibrary.iconIndex = DockModel.parseIconIndex(iconIndexOut.text)
       localAppLibrary.appsChanged()
     }
   }
