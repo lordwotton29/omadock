@@ -814,6 +814,15 @@ function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimi
   return { pinned: pinnedOut, running: runningOut, grouped: groupedOut }
 }
 
+// The model holds only plain values (see buildEntries), so equal JSON means
+// equal content. refreshDock skips assigning an equal model: every delegate
+// binding re-evaluates on assignment, and most events (a workspace switch,
+// a focus change) rebuild exactly the same model.
+function sameModel(a, b) {
+  if (!a || !b) return false
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 // True when the list has at least one window and every one of them is parked
 // on the minimized workspace. Used by both the running-icon hide logic and
 // the divider gating so the two can never disagree.

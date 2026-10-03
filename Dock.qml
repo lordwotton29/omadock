@@ -623,10 +623,12 @@ Item {
   function refreshDock() {
     var tops = ToplevelManager.toplevels ? ToplevelManager.toplevels.values : []
     if (root.filterByMonitor) tops = tops.filter(root.isToplevelOnThisMonitor)
-    root.dockModel = root.appLibrary
+    var next = root.appLibrary
       ? DockModel.buildEntries(root.pinnedIds, tops, root.appRows,
                                root.appLibrary, root.hyprToplevelFor, root.minimizedWorkspace, root.minimizedOrigins, root.appGroups)
       : { pinned: [], running: [] }
+    // An equal model would only re-run every delegate's bindings.
+    if (!DockModel.sameModel(next, root.dockModel)) root.dockModel = next
     root.rescanMinimizedWindows()
     root.pruneLaunching()
     root.pruneWindowState()
