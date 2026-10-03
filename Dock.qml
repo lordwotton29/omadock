@@ -3307,12 +3307,10 @@ Item {
   }
 
   function saveConfig() {
-    var conf = {}
-    try {
-      var txt = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
-      if (txt) conf = JSON.parse(txt) || {}
-    } catch (e) {
-      conf = {}
+    var conf = DockModel.configBase(DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES))
+    if (conf === null) {
+      console.warn("[omadock] omadock.json is not a JSON object; not saving so its other keys survive. Fix the file to save settings again.")
+      return
     }
     conf.alignment = root.alignment || "center"
     delete conf.position

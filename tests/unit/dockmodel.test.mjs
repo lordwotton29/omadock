@@ -44,3 +44,17 @@ test("a huge claimed length returns at once", () => {
   M.parsePinned('{"pinned": {"length": 10000000}}')
   assert.ok(performance.now() - t0 < 50, `took ${performance.now() - t0} ms`)
 })
+
+test("configBase: empty text starts from an empty object", () => {
+  assert.deepEqual(plain(M.configBase("")), {})
+  assert.deepEqual(plain(M.configBase("   \n")), {})
+})
+
+test("configBase: a JSON object is kept", () => {
+  assert.deepEqual(plain(M.configBase('{"a": 1, "b": [2]}')), { a: 1, b: [2] })
+})
+
+test("configBase: anything else means do not write", () => {
+  for (const t of ["garbage{", "[]", "[1]", '"str"', "null", "42", "true"])
+    assert.equal(M.configBase(t), null, t)
+})

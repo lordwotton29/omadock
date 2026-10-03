@@ -350,6 +350,23 @@ function readCapped(raw, maxBytes) {
   return ""
 }
 
+// The object saveConfig merges the dock's keys into: {} for an empty file,
+// the parsed object otherwise, and null when the file holds anything else
+// (a typo, an array, a string). null means "do not write": rewriting from
+// {} would silently drop every key the dock does not own.
+function configBase(text) {
+  var t = String(text == null ? "" : text).trim()
+  if (!t) return {}
+  var parsed
+  try {
+    parsed = JSON.parse(t)
+  } catch (e) {
+    return null
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+  return parsed
+}
+
 // Shape-bound generic list: keeps at most `max` entries that pass `predicate`.
 // Real arrays only: JSON gives nothing else, and an array-like object
 // ({ "length": 1e9 }) would be walked to its claimed length.
