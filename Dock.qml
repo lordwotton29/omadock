@@ -2245,6 +2245,7 @@ Item {
       var lua = "if _G.omadock_blur_rule then _G.omadock_blur_rule:set_enabled(false) end"
       if (root.blurMode !== "system") {
         lua += " _G.omadock_blur_rule = hl.layer_rule({ match = { namespace = \"^omadock$\" }, blur = "
+          + (root.blurMode === "on" ? "true" : "false") + ", blur_popups = "
           + (root.blurMode === "on" ? "true" : "false") + ", ignore_alpha = 0.05 })"
       }
       Quickshell.execDetached(["hyprctl", "eval", lua])
@@ -3964,7 +3965,15 @@ Item {
       left: true
       right: true
     }
-    implicitHeight: Math.max(650, Math.round((root.dockScreen ? root.dockScreen.height : 1080) - Style.space(36)))
+    // Only the card plus room above it for magnification, the launch/urgent
+    // bounce and the drag "Unpin" bubble; menus and tooltips are popups.
+    // Even logical height keeps the layer origin on the physical pixel grid
+    // at scale 1.5 (DockIndicator snaps to it).
+    readonly property real dockHeadroom: Style.space(56)
+    implicitHeight: {
+      var h = Math.ceil((dockCardComp ? dockCardComp.dockCard.height : 64) + Style.gapsOut + dockWindow.dockHeadroom)
+      return h + (h % 2)
+    }
 
     mask: Region {
       item: (root.dockVisible && dockCardComp && dockCardComp.dockHitbox) ? dockCardComp.dockHitbox : dockCardComp.dockCard
