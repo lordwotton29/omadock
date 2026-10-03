@@ -292,7 +292,8 @@ function parsePinned(raw) {
   }
   if (!parsed || typeof parsed !== "object") return []
 
-  var arr = isList(parsed) ? parsed : (isList(parsed.pinned) ? parsed.pinned : [])
+  // Real arrays only (see boundList).
+  var arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.pinned) ? parsed.pinned : [])
   var out = []
   var seen = {}
   for (var i = 0; i < arr.length; i++) {
@@ -350,12 +351,13 @@ function readCapped(raw, maxBytes) {
 }
 
 // Shape-bound generic list: keeps at most `max` entries that pass `predicate`.
+// Real arrays only: JSON gives nothing else, and an array-like object
+// ({ "length": 1e9 }) would be walked to its claimed length.
 function boundList(arr, max, predicate) {
-  if (!isList(arr)) return []
-  var src = toArray(arr)
+  if (!Array.isArray(arr)) return []
   var out = []
-  for (var i = 0; i < src.length && out.length < max; i++) {
-    var v = src[i]
+  for (var i = 0; i < arr.length && out.length < max; i++) {
+    var v = arr[i]
     if (predicate(v)) out.push(v)
   }
   return out
