@@ -170,6 +170,16 @@ BorderSurface {
           property bool isDragging: false
           property bool _dragJustEnded: false
 
+          // Per-window state, same reading as the dock's own indicator row.
+          readonly property var appEntry: root ? root.entryForId(cellItem.appId) : null
+          readonly property var appWindows: appEntry ? (appEntry.windowList || []) : []
+          function isWinMinimized(w) {
+            return !!w && ((w.isMinimized === true) || (root && root.liveWsNameOf(w) === root.minimizedWorkspace))
+          }
+          function isWinActive(w) {
+            return !!w && !!w.address && !!root && w.address === root.activeWindowAddress
+          }
+
           Rectangle {
             id: cellBg
             anchors.fill: parent
@@ -242,6 +252,26 @@ BorderSurface {
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
                 maximumLineCount: 1
+              }
+
+              // Running/minimized state, one mark per window like the dock:
+              // active bar, open dot, parked hollow dot.
+              Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Style.space(2)
+                visible: cellItem.appWindows.length > 0
+                Repeater {
+                  model: Math.min(3, cellItem.appWindows.length)
+                  delegate: DockIndicator {
+                    readonly property var winObj: cellItem.appWindows[index]
+                    readonly property bool winMin: cellItem.isWinMinimized(winObj)
+                    readonly property bool winActive: !winMin && cellItem.isWinActive(winObj)
+                    rootRef: root
+                    anchors.verticalCenter: parent.verticalCenter
+                    dense: true
+                    kind: winActive ? "active" : (winMin ? "minimized" : "window")
+                  }
+                }
               }
             }
 
@@ -326,11 +356,10 @@ BorderSurface {
                     root.removeAppFromGroup(appGroupPopup.activeGroup.id, cellItem.appId)
                   }
                 } else if (mouse.button === Qt.LeftButton) {
-                  // Left click: launch or focus app
-                  if (root) {
-                    root.activate(cellItem.appId)
-                    root.closeAppGroup()
-                  }
+                  // Launch, focus, or park the app. The popup stays open so
+                  // foldered apps can be switched and toggled repeatedly
+                  // without reopening the folder each time.
+                  if (root) root.activate(cellItem.appId)
                 }
               }
             }

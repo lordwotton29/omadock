@@ -68,6 +68,30 @@ Item {
 
   readonly property bool hasRunningApps: groupRunningInfo.running
 
+  // What the indicator row stands for: the folder's focused app, else its
+  // first running one. Clicking the row toggles that app like its icon would.
+  readonly property string indicatorAppId: {
+    if (!root) return ""
+    var fallback = ""
+    for (var a = 0; a < gitem.groupApps.length; a++) {
+      var ent = root.entryForId(gitem.groupApps[a])
+      if (!ent || !ent.running) continue
+      var focused = root.activeId && DockModel.isAppMatch(ent.appId, root.activeId)
+      if (!focused) {
+        var wins = ent.windowList || []
+        for (var w = 0; w < wins.length; w++) {
+          if (wins[w] && wins[w].address && wins[w].address === root.activeWindowAddress) {
+            focused = true
+            break
+          }
+        }
+      }
+      if (focused) return ent.appId
+      if (fallback === "") fallback = ent.appId
+    }
+    return fallback
+  }
+
   property real magnifyScale: {
     if (!root) return 1
     if (root.waveHover) return root.magnifyScaleAt(gitem.homeCenter)
@@ -240,24 +264,45 @@ Item {
     }
   }
 
-  // Running indicator dot underneath the folder if any child app is running
-  // 3-state running indicator row underneath the folder if any child app is running
-  Row {
-    id: indicatorRow
+  // 3-state running indicator row underneath the folder if any child app is
+  // running. Wrapped in a band so the click area can size to the row without
+  // entering the Row's own layout.
+  Item {
+    id: indicatorBand
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Style.space(1)
-    spacing: Style.space(3)
+    width: indicatorRow.width
+    height: indicatorRow.height
     visible: gitem.hasRunningApps || gitem.isOpen
+    z: 2
 
-    // Same marks as an app: the first turns into the accent bar while one
-    // of the group's apps has focus or the group is open.
-    Repeater {
-      model: Math.min(3, Math.max(1, gitem.groupRunningInfo.count))
-      delegate: DockIndicator {
-        rootRef: gitem.rootRef
-        anchors.verticalCenter: parent.verticalCenter
-        kind: index === 0 && (gitem.groupRunningInfo.active || gitem.isOpen) ? "active" : "window"
+    Row {
+      id: indicatorRow
+      spacing: Style.space(3)
+
+      // Same marks as an app: the first turns into the accent bar while one
+      // of the group's apps has focus or the group is open.
+      Repeater {
+        model: Math.min(3, Math.max(1, gitem.groupRunningInfo.count))
+        delegate: DockIndicator {
+          rootRef: gitem.rootRef
+          anchors.verticalCenter: parent.verticalCenter
+          kind: index === 0 && (gitem.groupRunningInfo.active || gitem.isOpen) ? "active" : "window"
+        }
+      }
+    }
+
+    // One click on the marks toggles the app they stand for; hover still
+    // reaches the tile beneath so its effects and tooltip keep working.
+    MouseArea {
+      id: indicatorHit
+      anchors.fill: parent
+      anchors.margins: -Style.space(3)
+      enabled: gitem.indicatorAppId !== ""
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        if (root) root.activate(gitem.indicatorAppId)
       }
     }
   }

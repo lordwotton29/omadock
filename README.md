@@ -189,6 +189,7 @@ Pin directories like `~/Downloads`, `~/Projects`, or custom paths directly to yo
 Organize applications into intelligent macOS / iOS-style folders directly on your dock:
 
 - **2×2 live preview grid** with window dots; the popover tray scales 2–4 columns.
+- **Popup stays open** — click cells to launch, switch, minimize and restore repeatedly; each cell shows per-window running/minimized marks, and one click on the tile's indicator dots toggles the folder's focused app.
 - **Drag-to-group, drag-to-pin** — drop one icon on another to make a folder.
 - **Inline renaming**, saved instantly.
 - **Drag-out extraction** — folders auto-dissolve when one app remains.
