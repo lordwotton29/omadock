@@ -1902,7 +1902,6 @@ Item {
           delete mo[fullAddr]
           root.minimizedOrigins = mo
         }
-        root.refreshDock()
       }
       if (n === "workspace" || n === "workspacev2" || n === "openwindow" || n === "closewindow" ||
           n === "movewindow" || n === "movewindowv2" || n === "resizewindow" || n === "resizewindowv2" ||
@@ -2159,7 +2158,27 @@ Item {
     root.refreshDock()
   }
 
+  // Up to five sources report one theme switch (three Color signals, the
+  // icon theme file, the colors file); each used to rescan apps and rebuild
+  // the dock. After the first load they coalesce into one run once the
+  // burst is over; the first load applies at once so icons do not flash.
+  property bool _themeApplied: false
   function handleThemeChanged() {
+    if (!root._themeApplied) {
+      root._themeApplied = true
+      root.applyThemeChange()
+      return
+    }
+    themeChangeTimer.restart()
+  }
+
+  Timer {
+    id: themeChangeTimer
+    interval: 100
+    onTriggered: root.applyThemeChange()
+  }
+
+  function applyThemeChange() {
     try {
       var t = DockModel.readCapped(themeIconsFile.text, DockModel.MAX_ICONS_THEME_BYTES).trim()
       if (t) root.currentIconThemeName = t
