@@ -691,6 +691,9 @@ Item {
   property var minimizedOrigins: ({})
   property var parkedAt: ({})
   property var urgentMap: ({})
+  // Counts urgency events (Hyprland urgent, app notifications) so items can
+  // animate again for a new event while they are already marked urgent.
+  property int urgentEvents: 0
   property var recentOpenedWindowAddrs: ({})
 
   // Per app: the window it parked last, and the window it was in last. Both
@@ -1871,6 +1874,7 @@ Item {
         var map = DockModel.copyMap(root.urgentMap)
         map[fullAddr] = true
         root.urgentMap = map
+        root.urgentEvents++
         modelTimer.restart()
       }
       if (n === "activewindow" || n === "activewindowv2") {
@@ -2002,6 +2006,7 @@ Item {
 
     if (found) {
       root.urgentMap = map
+      root.urgentEvents++
       modelTimer.restart()
     }
 
