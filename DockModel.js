@@ -329,6 +329,22 @@ var MAX_FOLDER_PATH = 512
 var MAX_FOLDER_NAME = 120
 var MAX_FOLDER_ICON = 120
 
+var MAX_SYSTEM_BLUR_SIZE = 100
+
+// Hyprland's own blur size as remembered in the config: an integer in
+// 0..MAX_SYSTEM_BLUR_SIZE (0 = not remembered). It is written back to
+// decoration.blur.size, where a huge value stalls the compositor.
+function boundSystemBlurSize(v) {
+  if (typeof v !== "number" || !isFinite(v)) return 0
+  return Math.max(0, Math.min(MAX_SYSTEM_BLUR_SIZE, Math.round(v)))
+}
+
+// A sound theme id for canberra-gtk-play -i, or "none"; anything else
+// (a path, "../x") falls back to "bell".
+function cleanSoundName(v) {
+  return (typeof v === "string" && /^[a-z0-9][a-z0-9-]{0,47}$/.test(v)) ? v : "bell"
+}
+
 // Byte ceiling applied to text read from a watched file. The returned slice is
 // never parsed further when the file exceeds the cap, so an oversized file can
 // neither grow shell memory nor amplify parse work. Oversize input yields "".
@@ -505,7 +521,10 @@ var FOLDER_SORTS = ["name", "kind", "modified", "added", "size"]
 function boundPinnedFolders(arr) {
   return boundList(arr, MAX_PINNED_FOLDERS, function(f) {
     if (!f || typeof f !== "object" || isList(f)) return false
-    return !!_boundedStr(f.path, MAX_FOLDER_PATH)
+    // Absolute or home-relative only: the path reaches xdg-open, which has
+    // no "--", so a relative "-x" would be read as an option.
+    var p = _boundedStr(f.path, MAX_FOLDER_PATH)
+    return !!p && (p.charAt(0) === "/" || p === "~" || p.indexOf("~/") === 0)
   }).map(function(f) {
     return {
       path: _boundedStr(f.path, MAX_FOLDER_PATH),

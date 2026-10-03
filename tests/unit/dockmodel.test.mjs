@@ -58,3 +58,29 @@ test("configBase: anything else means do not write", () => {
   for (const t of ["garbage{", "[]", "[1]", '"str"', "null", "42", "true"])
     assert.equal(M.configBase(t), null, t)
 })
+
+test("boundSystemBlurSize clamps to 0..100", () => {
+  assert.equal(M.boundSystemBlurSize(8), 8)
+  assert.equal(M.boundSystemBlurSize(7.6), 8)
+  assert.equal(M.boundSystemBlurSize(1e12), 100)
+  assert.equal(M.boundSystemBlurSize(Infinity), 0)
+  assert.equal(M.boundSystemBlurSize(-3), 0)
+  assert.equal(M.boundSystemBlurSize("9"), 0)
+})
+
+test("cleanSoundName accepts theme sound ids and none", () => {
+  assert.equal(M.cleanSoundName("message-new-instant"), "message-new-instant")
+  assert.equal(M.cleanSoundName("none"), "none")
+})
+
+test("cleanSoundName rejects paths and junk", () => {
+  for (const v of ["../../x", "/usr/share/a.oga", "Bell", "", "a".repeat(49), 5, null])
+    assert.equal(M.cleanSoundName(v), "bell", String(v))
+})
+
+test("pinned folders must be absolute or home-relative", () => {
+  const out = plain(M.boundPinnedFolders([
+    { path: "/srv/a" }, { path: "~/b" }, { path: "~" }, { path: "-x" }, { path: "rel/c" }, { path: 5 },
+  ]))
+  assert.deepEqual(out.map((f) => f.path), ["/srv/a", "~/b", "~"])
+})

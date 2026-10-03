@@ -2123,7 +2123,7 @@ Item {
       ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
       : 16
     root.blurSize = parsed && typeof parsed.blurSize === "number" ? Math.max(0, Math.min(20, Math.round(parsed.blurSize))) : 0
-    root.systemBlurSize = parsed && typeof parsed.systemBlurSize === "number" ? Math.max(0, Math.round(parsed.systemBlurSize)) : 0
+    root.systemBlurSize = DockModel.boundSystemBlurSize(parsed ? parsed.systemBlurSize : 0)
     root.applyBlurRule(false)
     root.showBorder = parsed ? parsed.showBorder !== false : true
     root.indicatorShape = (parsed && (parsed.indicatorShape === "rounded" || parsed.indicatorShape === "square")) ? parsed.indicatorShape : "theme"
@@ -2146,7 +2146,7 @@ Item {
     root.showUrgentHint = parsed ? parsed.showUrgentHint !== false : true
     root.urgentOnNotification = parsed ? parsed.urgentOnNotification !== false : true
     root.urgentSound = parsed ? parsed.urgentSound !== false : true
-    root.urgentSoundName = parsed && typeof parsed.urgentSoundName === "string" ? parsed.urgentSoundName : "bell"
+    root.urgentSoundName = DockModel.cleanSoundName(parsed ? parsed.urgentSoundName : "bell")
     root.revealDelay = parsed && typeof parsed.revealDelay === "number"
       ? Math.max(0, Math.min(2000, Math.round(parsed.revealDelay)))
       : 160
@@ -2273,7 +2273,7 @@ Item {
   // remembered as the system size the first time the dock overrides it.
   function setBlurSize(size, currentSize) {
     if (root.systemBlurSize <= 0 && root._appliedBlurSize <= 0 && currentSize > 0)
-      root.systemBlurSize = currentSize
+      root.systemBlurSize = DockModel.boundSystemBlurSize(currentSize)
     root.blurSize = Math.max(1, Math.min(20, Math.round(size)))
     root.applyBlurSize(false)
     root.saveConfig()
@@ -2552,6 +2552,7 @@ Item {
   }
 
   function setUrgentSoundName(name) {
+    name = DockModel.cleanSoundName(name)
     root.urgentSoundName = name
     root.urgentSound = name !== "none"
     if (name !== "none" && !root.isDndActive) {
