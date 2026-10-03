@@ -20,10 +20,11 @@ Item {
   readonly property alias hitboxHover: dockCardComp.hitboxHover
   readonly property alias minimizedTilesRepeater: dockCardComp.minimizedTilesRepeater
   readonly property alias foldersRepeater: dockCardComp.foldersRepeater
-  readonly property alias contextMenu: contextMenuComp
-  readonly property alias folderStackPopover: folderStackPopoverComp
+  readonly property var contextMenu: contextMenuLoader.item ? contextMenuLoader.item.body : null
+  readonly property var folderStackPopover: folderStackLoader.item ? folderStackLoader.item.body : null
   readonly property alias contentItemRef: dockWindow.contentItem
-  readonly property alias appContextMenuColumnRef: contextMenuComp.appContextMenuColumn
+  readonly property alias dockWindowRef: dockWindow
+  readonly property var appContextMenuColumnRef: root.contextMenu ? root.contextMenu.appContextMenuColumn : null
   readonly property alias customFolderPickerProc: customFolderPickerProc
   readonly property alias folderStackScanner: folderStackScanner
 
@@ -601,6 +602,11 @@ Item {
   property var terminalHosts: ({})
   property var terminalApps: ({})
   property var dockModel: ({ pinned: [], running: [] })
+  // Height a popup may use above the card: the screen above the dock, less
+  // the margin the full-screen layer used to leave (Style.space(36)).
+  readonly property real popupMaxHeight: Math.max(240,
+    (root.dockScreen ? root.dockScreen.height : 1080) - Style.space(36)
+    - Style.gapsOut - (dockCardComp ? dockCardComp.dockCard.height : 0) - Style.space(16))
   // Live scan of parked windows for the preview-tile section. Built straight
   // off Hyprland's own toplevel list, so it cannot go stale the way cached
   // model primitives can.
@@ -776,6 +782,13 @@ Item {
   // subfolders after clicking into it. activeStackTrail holds the folders
   // walked through ({ path, name }), so Back can return step by step.
   property string activeStackPath: ""
+  // The folder being listed. Its name, path and entries replace the shown
+  // ones together when the scan lands, so switching folders never flashes
+  // an empty or half-filled stack.
+  property string pendingStackPath: ""
+  property string pendingStackName: ""
+  property bool activeStackLoading: false
+  property real pendingStackX: 0
   property var activeStackTrail: []
   // "stack" (list) or "grid" (larger icons and previews), per pinned folder.
   readonly property string activeStackView: root.activeStackFolder !== "" ? root.folderViewFor(root.activeStackFolder) : "stack"
@@ -1295,14 +1308,12 @@ Item {
           // folder the user currently has open (or any at all). Prevents a
           // slow older scan from painting one folder's files under another's
           // header, or repopulating after the stack was closed.
-          var wanted = String(root.activeStackPath || "")
+          var wanted = String(root.pendingStackPath || "")
           if (parsed.folder !== wanted) return
-          root.activeStackTotalCount = parsed.count || 0
-          root.activeStackEntries = parsed.items || []
+          root.applyStackScan(parsed.items || [], parsed.count || 0)
         } catch (e) {
           console.warn("[omadock] Failed parsing folder scan:", e)
-          root.activeStackTotalCount = 0
-          root.activeStackEntries = []
+          root.applyStackScan([], 0)
         }
       }
     }
@@ -2421,6 +2432,7 @@ Item {
       var lua = "if _G.omadock_blur_rule then _G.omadock_blur_rule:set_enabled(false) end"
       if (root.blurMode !== "system") {
         lua += " _G.omadock_blur_rule = hl.layer_rule({ match = { namespace = \"^omadock$\" }, blur = "
+          + (root.blurMode === "on" ? "true" : "false") + ", blur_popups = "
           + (root.blurMode === "on" ? "true" : "false") + ", ignore_alpha = 0.05 })"
       }
       Quickshell.execDetached(["hyprctl", "eval", lua])
@@ -4114,7 +4126,9 @@ Item {
     // older scan race the new one.
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = path
-    root.activeStackX = cx
+    // The open stack moves over the new folder together with its content.
+    root.pendingStackX = cx
+    if (root.activeStackEntries.length === 0) root.activeStackX = cx
     root.activeStackTrail = []
     root.showStackDir((path || "").replace(/^~/, Quickshell.env("HOME")), name || "Folder")
     root.syncVisibility()
@@ -4123,12 +4137,27 @@ Item {
   // Lists dir in the open stack. Kill any in-flight scan first: assigning
   // running = true while a process is already running is a no-op in
   // Quickshell, which used to let a slow older scan race the new one.
+  // The scan for the pending folder landed: show it in one step.
+  function applyStackScan(items, count) {
+    if (root.pendingStackPath === "") return
+    root.activeStackPath = root.pendingStackPath
+    root.activeStackName = root.pendingStackName
+    root.activeStackX = root.pendingStackX
+    root.activeStackTotalCount = count
+    root.activeStackEntries = items
+    root.activeStackLoading = false
+  }
+
   function showStackDir(dir, name) {
     if (folderStackScanner.running) folderStackScanner.running = false
-    root.activeStackPath = dir
-    root.activeStackName = name
-    root.activeStackEntries = []
-    root.activeStackTotalCount = 0
+    root.pendingStackPath = dir
+    root.pendingStackName = name
+    root.activeStackLoading = true
+    // First open: nothing to keep on screen, so show the header right away.
+    if (root.activeStackEntries.length === 0) {
+      root.activeStackPath = dir
+      root.activeStackName = name
+    }
     folderStackScanner.targetFolder = dir
     folderStackScanner.sortKey = root.folderSortFor(root.activeStackFolder)
     folderStackScanner.running = true
@@ -4153,12 +4182,18 @@ Item {
   function closeFolderStack() {
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = ""
-    root.activeStackName = ""
-    root.activeStackPath = ""
+    root.pendingStackName = ""
+    root.pendingStackPath = ""
+    root.activeStackLoading = false
     root.activeStackTrail = []
-    root.activeStackEntries = []
     root.fileDragOut = false
-    root.syncVisibility()
+    // Cleared once the popup is gone, so its last frame keeps its content.
+    Qt.callLater(function() {
+      if (root.activeStackFolder !== "") return
+      root.activeStackName = ""
+      root.activeStackPath = ""
+      root.activeStackEntries = []
+    })
   }
 
   function openFolderContext(path, name, cx, cy) {
@@ -4345,7 +4380,7 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "omadock"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: (appGroupPopupComp && appGroupPopupComp.isEditingName)
+    WlrLayershell.keyboardFocus: (appGroupLoader.item && appGroupLoader.item.body.isEditingName)
       ? WlrKeyboardFocus.OnDemand
       : WlrKeyboardFocus.None
     exclusionMode: (!root.autohide) ? ExclusionMode.Normal : ExclusionMode.Ignore
@@ -4355,17 +4390,37 @@ Item {
       left: true
       right: true
     }
-    implicitHeight: Math.max(650, Math.round((root.dockScreen ? root.dockScreen.height : 1080) - Style.space(36)))
+    // Only the card plus room above it for magnification, the launch/urgent
+    // bounce and the drag "Unpin" bubble; menus and tooltips are popups.
+    // Even logical height keeps the layer origin on the physical pixel grid
+    // at scale 1.5 (DockIndicator snaps to it).
+    readonly property real dockHeadroom: Style.space(56)
+    implicitHeight: {
+      var h = Math.ceil((dockCardComp ? dockCardComp.dockCard.height : 64) + Style.gapsOut + dockWindow.dockHeadroom)
+      return h + (h % 2)
+    }
 
     mask: Region {
       item: (root.dockVisible && dockCardComp && dockCardComp.dockHitbox) ? dockCardComp.dockHitbox : dockCardComp.dockCard
       regions: [
-        Region { item: contextMenuComp },
-        Region { item: folderStackPopoverComp },
-        Region { item: appGroupPopupComp },
         Region { item: revealStrip },
-        Region { item: globalDismiss }
+        Region { item: globalDismiss },
+        Region { item: maskTracker }
       ]
+    }
+
+    // A Region rebuilds only when its own item's x/y/width/height change, not
+    // when an ancestor moves. The hitbox sits inside the card, which slides
+    // in (anchors.bottomMargin) and moves with the alignment, so without this
+    // zero-size follower the mask kept the card's hidden position from start
+    // up and the dock got no pointer input. (Popups anchored to the card used
+    // to trigger the rebuild by accident.)
+    Item {
+      id: maskTracker
+      x: dockCardComp ? dockCardComp.x : 0
+      y: dockCardComp ? dockCardComp.y : 0
+      width: 0
+      height: 0
     }
 
     // Bottom edge reveal strip — thin edge trigger with zero click-swallowing
@@ -4415,32 +4470,17 @@ Item {
       }
     }
 
-    // Global dismiss area - catches clicks outside context menu, folder stack, or app group popup
+    // Clears a drag released outside the card (popups dismiss through their focus grabs).
     Item {
       id: globalDismiss
-      readonly property bool armed: !root.fileDragOut && (root.contextAppId !== "" || root.activeStackFolder !== "" || root.activeAppGroupId !== "" || root.dockDragActive)
-      width: armed ? dockWindow.width : 0
-      height: armed ? dockWindow.height : 0
+      width: root.dockDragActive ? dockWindow.width : 0
+      height: root.dockDragActive ? dockWindow.height : 0
 
       MouseArea {
         anchors.fill: parent
         z: -1
         hoverEnabled: true
-        // Accept every button: the layer-shell mask routes all clicks here
-        // while a menu is open, so a right-click on empty space must dismiss
-        // the menu too instead of being swallowed with no effect.
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: function(mouse) {
-          if (root.contextAppId !== "") {
-            root.closeContext()
-          }
-          if (root.activeStackFolder !== "") {
-            root.closeFolderStack()
-          }
-          if (root.activeAppGroupId !== "") {
-            root.closeAppGroup()
-          }
-        }
         onReleased: function(mouse) {
           if (root.dragAppId !== "") {
             root.dragAppId = ""
@@ -4462,21 +4502,70 @@ Item {
     }
 
     // ------------------------------------------------------------ Folder Stack Popover
-    FolderPopup {
-      id: folderStackPopoverComp
-      rootRef: root
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: folderStackLoader
+      active: root.activeStackFolder !== "" && root.dockVisible
+
+      DockPopupWindow {
+        id: folderStackWindow
+        dockRoot: root
+        open: true
+        centerX: root.activeStackX
+        body: folderStackPopoverComp
+        onDismissed: root.closeFolderStack()
+
+        FolderPopup {
+          id: folderStackPopoverComp
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
+        }
+      }
     }
 
     // ------------------------------------------------------------ App Group Popover
-    AppGroupPopup {
-      id: appGroupPopupComp
-      rootRef: root
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: appGroupLoader
+      active: root.activeAppGroupId !== "" && root.dockVisible
+
+      DockPopupWindow {
+        id: appGroupWindow
+        dockRoot: root
+        open: true
+        centerX: root.activeAppGroupX
+        body: appGroupPopupComp
+        onDismissed: root.closeAppGroup()
+
+        AppGroupPopup {
+          id: appGroupPopupComp
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
+          popupWindow: appGroupWindow
+        }
+      }
     }
 
     // ------------------------------------------------------------ context menu
-    DockContextMenu {
-      id: contextMenuComp
-      rootRef: root
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: contextMenuLoader
+      active: root.contextAppId !== ""
+
+      DockPopupWindow {
+        id: contextMenuWindow
+        dockRoot: root
+        open: true
+        centerX: root.contextX
+        body: contextMenuComp
+        onDismissed: root.closeContext()
+
+        DockContextMenu {
+          id: contextMenuComp
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
+        }
+      }
     }
   }
 
