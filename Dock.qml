@@ -20,11 +20,11 @@ Item {
   readonly property alias hitboxHover: dockCardComp.hitboxHover
   readonly property alias minimizedTilesRepeater: dockCardComp.minimizedTilesRepeater
   readonly property alias foldersRepeater: dockCardComp.foldersRepeater
-  readonly property alias contextMenu: contextMenuComp
-  readonly property alias folderStackPopover: folderStackPopoverComp
+  readonly property var contextMenu: contextMenuLoader.item ? contextMenuLoader.item.body : null
+  readonly property var folderStackPopover: folderStackLoader.item ? folderStackLoader.item.body : null
   readonly property alias contentItemRef: dockWindow.contentItem
   readonly property alias dockWindowRef: dockWindow
-  readonly property alias appContextMenuColumnRef: contextMenuComp.appContextMenuColumn
+  readonly property var appContextMenuColumnRef: root.contextMenu ? root.contextMenu.appContextMenuColumn : null
   readonly property alias customFolderPickerProc: customFolderPickerProc
   readonly property alias folderStackScanner: folderStackScanner
 
@@ -3955,7 +3955,7 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "omadock"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: (appGroupPopupComp && appGroupPopupComp.isEditingName)
+    WlrLayershell.keyboardFocus: (appGroupLoader.item && appGroupLoader.item.body.isEditingName)
       ? WlrKeyboardFocus.OnDemand
       : WlrKeyboardFocus.None
     exclusionMode: (!root.autohide) ? ExclusionMode.Normal : ExclusionMode.Ignore
@@ -4062,48 +4062,69 @@ Item {
     }
 
     // ------------------------------------------------------------ Folder Stack Popover
-    DockPopupWindow {
-      id: folderStackWindow
-      dockRoot: root
-      open: root.activeStackFolder !== "" && root.dockVisible
-      centerX: root.activeStackX
-      body: folderStackPopoverComp
-      onDismissed: root.closeFolderStack()
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: folderStackLoader
+      active: root.activeStackFolder !== "" && root.dockVisible
 
-      FolderPopup {
-        id: folderStackPopoverComp
-        rootRef: root
+      DockPopupWindow {
+        id: folderStackWindow
+        dockRoot: root
+        open: true
+        centerX: root.activeStackX
+        body: folderStackPopoverComp
+        onDismissed: root.closeFolderStack()
+
+        FolderPopup {
+          id: folderStackPopoverComp
+          rootRef: root
+        }
       }
     }
 
     // ------------------------------------------------------------ App Group Popover
-    DockPopupWindow {
-      id: appGroupWindow
-      dockRoot: root
-      open: root.activeAppGroupId !== "" && root.dockVisible
-      centerX: root.activeAppGroupX
-      body: appGroupPopupComp
-      onDismissed: root.closeAppGroup()
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: appGroupLoader
+      active: root.activeAppGroupId !== "" && root.dockVisible
 
-      AppGroupPopup {
-        id: appGroupPopupComp
-        rootRef: root
-        popupWindow: appGroupWindow
+      DockPopupWindow {
+        id: appGroupWindow
+        dockRoot: root
+        open: true
+        centerX: root.activeAppGroupX
+        body: appGroupPopupComp
+        onDismissed: root.closeAppGroup()
+
+        AppGroupPopup {
+          id: appGroupPopupComp
+          rootRef: root
+          popupWindow: appGroupWindow
+        }
       }
     }
 
     // ------------------------------------------------------------ context menu
-    DockPopupWindow {
-      id: contextMenuWindow
-      dockRoot: root
-      open: root.contextAppId !== ""
-      centerX: root.contextX
-      body: contextMenuComp
-      onDismissed: root.closeContext()
+    // Created only while open: idle popup windows cost a QQuickWindow each,
+    // and several hidden ones next to the dock broke its hover handling.
+    LazyLoader {
+      id: contextMenuLoader
+      active: root.contextAppId !== ""
 
-      DockContextMenu {
-        id: contextMenuComp
-        rootRef: root
+      DockPopupWindow {
+        id: contextMenuWindow
+        dockRoot: root
+        open: true
+        centerX: root.contextX
+        body: contextMenuComp
+        onDismissed: root.closeContext()
+
+        DockContextMenu {
+          id: contextMenuComp
+          rootRef: root
+        }
       }
     }
   }

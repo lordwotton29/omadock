@@ -40,33 +40,38 @@ Item {
     onTriggered: bubble.shown = true
   }
 
-  TooltipWindow {
-    target: bubble.parent
-    gap: Style.space(8)
-    shown: bubble.shown && bubble.text !== "" && bubble.showTooltips
-      && !bubble.blocked && bubble.contextAppId === ""
-    body: bubbleSurface
+  // The popup window exists only while the bubble is shown.
+  LazyLoader {
+    active: bubble.shown && bubble.text !== "" && bubble.showTooltips && !bubble.blocked && bubble.contextAppId === ""
 
-    BorderSurface {
-      id: bubbleSurface
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
-      radius: Style.cornerRadius
-      padding: Style.space(4)
-      width: bubbleLabel.implicitWidth + contentLeftInset + contentRightInset
-      height: bubbleLabel.implicitHeight + contentTopInset + contentBottomInset
+    TooltipWindow {
+      target: bubble.parent
+      gap: Style.space(8)
+      shown: true
+      body: bubbleSurface
 
-      Text {
-        id: bubbleLabel
-        x: bubbleSurface.contentLeftInset
-        y: bubbleSurface.contentTopInset
-        text: bubble.text
-        textFormat: Text.PlainText
-        color: Color.tooltip.text
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignHCenter
+      BorderSurface {
+        id: bubbleSurface
+        color: Color.tooltip.background
+        borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+        radius: Style.cornerRadius
+        padding: Style.space(4)
+        width: bubbleLabel.implicitWidth + contentLeftInset + contentRightInset
+        height: bubbleLabel.implicitHeight + contentTopInset + contentBottomInset
+
+        Text {
+          id: bubbleLabel
+          x: bubbleSurface.contentLeftInset
+          y: bubbleSurface.contentTopInset
+          text: bubble.text
+          textFormat: Text.PlainText
+          color: Color.tooltip.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          horizontalAlignment: Text.AlignHCenter
+        }
       }
     }
   }
+
 }
