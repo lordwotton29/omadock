@@ -64,15 +64,69 @@ Item {
 
   readonly property var dockScreen: root.pickScreen()
 
-  // The output's own scale (Hyprland's monitor scale, e.g. 1.5). Qt renders
-  // fractional scales at the next whole ratio (2) and the compositor scales
-  // the buffer down, so pixel-exact drawing has to target this grid, not
-  // Screen.devicePixelRatio. HyprlandMonitor.scale reads 0 until the monitor
-  // list has been fetched, hence the refresh (Component.onCompleted) and the
-  // fallback.
-  readonly property real outputScale: {
+  // The output's own scale (Hyprland's monitor scale, e.g. 1.5): the pixel
+  // grid that pixel-exact drawing snaps to. Screen.devicePixelRatio reports
+  // the rounded ratio (2 at 1.5), not the grid the window raster lands on,
+  // so it cannot stand in for this number. HyprlandMonitor.scale reads 0
+  // until the monitor list has been fetched, hence the refresh
+  // (Component.onCompleted) and the fallback.
+  //
+  // HyprlandMonitor.scale also updates in place without notifying, Hyprland
+  // emits no event when a monitor's scale changes, and Qt's rounded
+  // Screen.devicePixelRatio carries no change signal at all — so the lookup
+  // is driven from the things that do fire: the screen object quickshell
+  // re-advertises on any output change (dockScreen) and Hyprland's monitor
+  // events. The refresh's IPC reply lands asynchronously and silently, so
+  // recheckOutputScale re-runs the lookup in a short burst until it has had
+  // time to land.
+  property int monitorRev: 0
+  readonly property real outputScale: root.lookupOutputScale(root.monitorRev)
+  onDockScreenChanged: root.recheckOutputScale()
+
+  function lookupOutputScale(_rev) {
+    // HyprlandMonitor.scale stops tracking after load, but the monitor's
+    // physical size and Qt's logical screen size stay live — their ratio is
+    // the output scale. Diagonal over diagonal, since width alone breaks on a
+    // rotated output. m.scale is only a last resort. _rev is the binding's
+    // re-run hook (monitorRev), not an input.
     var m = root.dockScreen ? Hyprland.monitorFor(root.dockScreen) : null
+    var lw = Screen.width
+    var lh = Screen.height
+    if (m && m.width > 0 && m.height > 0 && lw > 0 && lh > 0) {
+      return Math.sqrt((m.width * m.width + m.height * m.height) / (lw * lw + lh * lh))
+    }
     return (m && m.scale > 0) ? m.scale : 1
+  }
+
+  function recheckOutputScale() {
+    Hyprland.refreshMonitors()
+    scaleRevBump.ticks = 0
+    scaleRevBump.restart()
+  }
+
+  // Bounded burst, not a poll: stops on its own after two seconds.
+  Timer {
+    id: scaleRevBump
+    interval: 250
+    repeat: true
+    property int ticks: 0
+    onTriggered: {
+      root.monitorRev++
+      ticks++
+      if (ticks >= 8) {
+        stop()
+        ticks = 0
+      }
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event.name === "configreloaded" || event.name.startsWith("monitor")) {
+        root.recheckOutputScale()
+      }
+    }
   }
 
   // ------------------------------------------------- multi-monitor
@@ -344,7 +398,7 @@ Item {
     root.loadConfig()
     if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
     // Fills HyprlandMonitor.scale for outputScale.
-    Hyprland.refreshMonitors()
+    root.recheckOutputScale()
   }
 
   // ------------------------------------------------- magnification
