@@ -2,7 +2,7 @@
 // globals, so it runs in a vm context; DOCKMODEL overrides the path.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import vm from "node:vm"
 
 const file = process.env.DOCKMODEL || new URL("../../DockModel.js", import.meta.url)
@@ -135,16 +135,23 @@ test("fuzzyScore: order matters and gaps are allowed", () => {
   assert.ok(M.fuzzyScore("", "pixel"), -1)
 })
 
-test("every search key registers exactly one row in SettingsPanel.qml", () => {
-  const src = readFileSync(new URL("../../components/SettingsPanel.qml", import.meta.url), "utf8")
+// The settings panel is assembled from components/settings/; the search
+// keys must keep exactly one registering row across the whole module.
+const settingsSources = [
+  new URL("../../components/SettingsPanel.qml", import.meta.url),
+  ...readdirSync(new URL("../../components/settings/", import.meta.url))
+    .sort()
+    .map((f) => new URL(`../../components/settings/${f}`, import.meta.url)),
+].map((u) => readFileSync(u, "utf8")).join("\n")
+
+test("every search key registers exactly one settings row", () => {
   for (const e of M.SETTINGS_SEARCH) {
-    const n = src.split(`key: "${e.key}"`).length - 1
+    const n = settingsSources.split(`key: "${e.key}"`).length - 1
     assert.equal(n, 1, `expected exactly one row for search key ${e.key}, found ${n}`)
   }
 })
 
-test("SettingsPanel.qml keeps no retired page ids", () => {
-  const src = readFileSync(new URL("../../components/SettingsPanel.qml", import.meta.url), "utf8")
-  assert.ok(!src.includes('panel.page === "effects"'))
-  assert.ok(!src.includes('panel.page === "size"'))
+test("the settings module keeps no retired page ids", () => {
+  assert.ok(!settingsSources.includes('panel.page === "effects"'))
+  assert.ok(!settingsSources.includes('panel.page === "size"'))
 })

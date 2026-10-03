@@ -549,7 +549,8 @@ qs -p /usr/share/omarchy/shell ipc call omadock restoreLast
 | `Dock.qml` | The dock itself: model refresh, windows, popups, badges, settings state. |
 | `DockHost.qml` | Overlay entry point declared by `manifest.json`. |
 | `DockModel.js` | Pure model logic and every safety bound (parsing caps, identity resolution). |
-| `components/` | QML UI components (dock items, popups, tooltips, settings panel, shaders). |
+| `components/` | QML UI components (dock items, popups, tooltips, shaders) and `SettingsPanel.qml`, the settings shell (sidebar, search, page assembly). |
+| `components/settings/` | The settings module: one file per settings page plus the shared row family (`SettingRow`, `SwitchRow`, `ChoiceRow`, `SliderRow`, `Swatch`, `SectionLabel`). Pages wire `root` (the Dock) into rows; the panel owns search-jump state and registers rows by their `key`. |
 | `scripts/` | Python helpers (folder/drive scans, notification watcher, keybinding setup) plus `bind-keys.sh`. |
 | `shaders/` | Hover/icon-style fragment shaders with precompiled `.qsb` bundles. |
 | `tests/unit/` | Node and Python unit suites — what CI runs on every PR. |
