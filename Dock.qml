@@ -3786,13 +3786,17 @@ Item {
   function closeFolderStack() {
     if (folderStackScanner.running) folderStackScanner.running = false
     root.activeStackFolder = ""
-    root.activeStackName = ""
-    root.activeStackPath = ""
     root.pendingStackName = ""
     root.pendingStackPath = ""
     root.activeStackLoading = false
     root.activeStackTrail = []
-    root.activeStackEntries = []
+    // Cleared once the popup is gone, so its last frame keeps its content.
+    Qt.callLater(function() {
+      if (root.activeStackFolder !== "") return
+      root.activeStackName = ""
+      root.activeStackPath = ""
+      root.activeStackEntries = []
+    })
     root.syncVisibility()
   }
 
