@@ -4093,7 +4093,7 @@ Item {
 
         FolderPopup {
           id: folderStackPopoverComp
-          rootRef: root
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
         }
       }
     }
@@ -4115,7 +4115,7 @@ Item {
 
         AppGroupPopup {
           id: appGroupPopupComp
-          rootRef: root
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
           popupWindow: appGroupWindow
         }
       }
@@ -4138,7 +4138,7 @@ Item {
 
         DockContextMenu {
           id: contextMenuComp
-          rootRef: root
+          rootRef: dockRoot   // not `root`: inside the menu that name is its own property
         }
       }
     }
