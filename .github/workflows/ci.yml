@@ -41,20 +41,24 @@ jobs:
   qml-lint:
     name: QML syntax gate
     runs-on: ubuntu-24.04
+    # Same toolchain as the Omarchy host (Arch qt6-declarative qmllint).
+    # Ubuntu's Qt 6.4 qmllint exits non-zero on warnings alone, which can never
+    # pass here because Quickshell and the Omarchy shell modules are not
+    # installable on runners; Qt 6.11 treats unresolved imports as warnings and
+    # fails only on parse errors — verified against the live toolchain.
+    container: archlinux:latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install qmllint (Qt 6)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qt6-declarative-dev-tools
+      - name: Install qmllint (qt6-declarative)
+        run: pacman -Sy --noconfirm qt6-declarative
 
-      # qmllint exits non-zero on parse errors, so this is a hard syntax gate;
-      # diagnostics stay visible in the log. Typed checking against the Omarchy
-      # shell and Quickshell modules only exists on an Omarchy host — that runs
-      # in the release checklist (AGENTS.md "Verification Commands").
+      # Hard syntax gate: parse errors exit non-zero (255 on broken QML).
+      # Typed checking against the Omarchy shell and Quickshell modules only
+      # exists on an Omarchy host — that runs in the release checklist
+      # (AGENTS.md "Verification Commands").
       - name: qmllint
-        run: /usr/lib/qt6/bin/qmllint Dock.qml DockHost.qml components/*.qml
+        run: /usr/lib/qt6/bin/qmllint --silent Dock.qml DockHost.qml components/*.qml
 
   manifest:
     name: Manifest schema
