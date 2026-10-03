@@ -254,7 +254,7 @@ Right-click the Omarchy logo or empty dock space to access deep customization.
 
 ### 🎛️ Settings Panel
 
-Right-clicking either one opens the full settings panel directly: a sidebar with *Appearance*, *Placement*, *Behavior*, *Effects*, *Size & Spacing*, *Presets*, *Folders* and *App Groups*, with switches, sliders and dropdowns for every option. Changes apply live, so the dock underneath previews them. Close it with <kbd>Esc</kbd>, the close button, or a click outside. The panel can also be opened from a keybind: `omarchy-shell omadock openSettings`.
+Right-clicking either one opens the full settings panel directly: a sidebar with *Appearance*, *Icons*, *Motion & Effects*, *Behavior*, *Placement*, *Folders*, *App Groups*, *Presets* and *About*, with switches, sliders and dropdowns for every option. A fuzzy search box at the top of the sidebar finds any setting by name or synonym (typos included — `pixl` reaches the pixel icon style) and picking a hit jumps to and highlights that setting's row. Changes apply live, so the dock underneath previews them. Close it with <kbd>Esc</kbd>, the close button, or a click outside. The panel can also be opened from a keybind: `omarchy-shell omadock openSettings`.
 
 The settings at a glance:
 
@@ -477,7 +477,7 @@ Additional IPC methods available:
 - `setAlignment("center" | "left" | "right")`: Change dock alignment dynamically.
 - `setPosition("bottom" | "top" | "left" | "right")`: Change dock edge position.
 - `openSettings`: Open the settings panel on the focused monitor's dock.
-- `openSettingsPage("appearance" | "placement" | "behavior" | "effects" | "size" | "folders" | "groups" | "presets" | "about")`: Open the settings panel on a given page.
+- `openSettingsPage("appearance" | "icons" | "motion" | "behavior" | "placement" | "folders" | "groups" | "presets" | "about")`: Open the settings panel on a given page.
 - `closeSettings`: Close the settings panel.
 
 > [!NOTE]
