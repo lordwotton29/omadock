@@ -1197,7 +1197,8 @@ Item {
     property string targetFolder: ""
     property string sortKey: "modified"
     // scripts/list-folder.py lists, sorts and caps the folder (see its header).
-    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey, "300"]
+    // timeout: a stalled filesystem (network mount) must not leave the helper running.
+    command: ["timeout", "-k", "2", "10", "python3", decodeURIComponent(Qt.resolvedUrl("scripts/list-folder.py").toString().replace(/^file:\/\//, "")), folderStackScanner.targetFolder, folderStackScanner.sortKey, "300"]
     running: false
     stdout: StdioCollector {
       onStreamFinished: {
