@@ -3979,8 +3979,23 @@ Item {
       item: (root.dockVisible && dockCardComp && dockCardComp.dockHitbox) ? dockCardComp.dockHitbox : dockCardComp.dockCard
       regions: [
         Region { item: revealStrip },
-        Region { item: globalDismiss }
+        Region { item: globalDismiss },
+        Region { item: maskTracker }
       ]
+    }
+
+    // A Region rebuilds only when its own item's x/y/width/height change, not
+    // when an ancestor moves. The hitbox sits inside the card, which slides
+    // in (anchors.bottomMargin) and moves with the alignment, so without this
+    // zero-size follower the mask kept the card's hidden position from start
+    // up and the dock got no pointer input. (Popups anchored to the card used
+    // to trigger the rebuild by accident.)
+    Item {
+      id: maskTracker
+      x: dockCardComp ? dockCardComp.x : 0
+      y: dockCardComp ? dockCardComp.y : 0
+      width: 0
+      height: 0
     }
 
     // Bottom edge reveal strip — thin edge trigger with zero click-swallowing
