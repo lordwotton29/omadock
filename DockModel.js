@@ -342,7 +342,13 @@ function readCapped(raw, maxBytes) {
     var bytes = 0
     for (var i = 0; i < text.length; i++) {
       var c = text.charCodeAt(i)
-      bytes += c < 0x80 ? 1 : (c < 0x800 ? 2 : (c < 0x10000 ? 3 : 4))
+      if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length
+          && text.charCodeAt(i + 1) >= 0xdc00 && text.charCodeAt(i + 1) <= 0xdfff) {
+        bytes += 4
+        i++
+      } else {
+        bytes += c < 0x80 ? 1 : (c < 0x800 ? 2 : 3)
+      }
       if (bytes > maxBytes) return ""
     }
     return text
@@ -352,8 +358,9 @@ function readCapped(raw, maxBytes) {
 
 // Shape-bound generic list: keeps at most `max` entries that pass `predicate`.
 function boundList(arr, max, predicate) {
-  if (!isList(arr)) return []
-  var src = toArray(arr)
+  // Persisted JSON collections must be arrays, not attacker-controlled lengths.
+  if (!Array.isArray(arr)) return []
+  var src = arr
   var out = []
   for (var i = 0; i < src.length && out.length < max; i++) {
     var v = src[i]
@@ -522,6 +529,88 @@ function boundPinnedFolders(arr) {
   })
 }
 
+// ---------------------------------------------------------------- presets
+// A preset is a named copy of the dock's look: the config keys below, as
+// saveConfig writes them. Values reach the dock only through
+// Dock.applyLook, the same parsing as the config file, so a preset can hold
+// nothing the file could not.
+var LOOK_KEYS = [
+  "showBackground", "bgColor", "bgFill", "gradientPreset", "gradientStrength",
+  "grain", "opacity", "blur", "showShadow", "shadowStrength", "showBorder",
+  "borderWidth", "borderOpacity", "shape", "cornerRadius", "splitSections",
+  "dividerGeometry", "dividerHeight", "dividerStyle", "dividerWidth", "dividerOpacity",
+  "iconStyle", "iconTint", "iconHoverOriginal", "iconHoverReveal", "iconContrast", "iconStrength",
+  "iconGrid", "indicatorShape", "hoverEffect", "launchBounce", "groupStyle",
+  "groupIconEffects", "folderColor", "iconSize", "itemSpacing", "sectionSpacing"
+]
+var MAX_PRESETS = 6
+var MAX_PRESET_NAME = 40
+var MAX_PRESET_ID = 64
+var MAX_LOOK_STRING = 64
+
+// Exactly the look keys of a config-shaped object, scalars only, strings
+// capped. Values the config writes as a missing key are written out:
+// iconSize 0 (automatic) and cornerRadius -1 (follow the shape).
+function pickLook(conf) {
+  var src = (conf && typeof conf === "object") ? conf : {}
+  var out = {}
+  for (var i = 0; i < LOOK_KEYS.length; i++) {
+    var k = LOOK_KEYS[i]
+    if (!Object.prototype.hasOwnProperty.call(src, k)) continue
+    var v = src[k]
+    if (typeof v === "string") out[k] = v.slice(0, MAX_LOOK_STRING)
+    else if (typeof v === "boolean") out[k] = v
+    else if (typeof v === "number" && isFinite(v)) out[k] = v
+  }
+  if (!Object.prototype.hasOwnProperty.call(out, "iconSize")) out.iconSize = 0
+  if (!Object.prototype.hasOwnProperty.call(out, "cornerRadius")) out.cornerRadius = -1
+  return out
+}
+
+// Every look key the preset holds has the same value in cur. A preset
+// saved before a key existed still matches on the keys it has.
+function lookIncludes(cur, look) {
+  var x = cur || {}
+  var y = look || {}
+  for (var i = 0; i < LOOK_KEYS.length; i++) {
+    var k = LOOK_KEYS[i]
+    if (!Object.prototype.hasOwnProperty.call(y, k)) continue
+    if (JSON.stringify(x[k]) !== JSON.stringify(y[k])) return false
+  }
+  return true
+}
+
+// Trimmed, without control or bidi characters, at most MAX_PRESET_NAME.
+function cleanPresetName(s) {
+  var t = String(s == null ? "" : s)
+    .replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  return t.slice(0, MAX_PRESET_NAME).trim()
+}
+
+// Persisted presets: valid id and name, an object look, unique ids, at most
+// MAX_PRESETS. Looks are reduced to the look keys.
+function boundPresets(arr) {
+  // Real arrays only: JSON gives nothing else, and an array-like object
+  // ({ "length": 1e9 }) would be walked to its claimed length.
+  if (!Array.isArray(arr)) return []
+  var src = arr
+  var seen = Object.create(null)
+  var out = []
+  for (var i = 0; i < src.length && out.length < MAX_PRESETS; i++) {
+    var p = src[i]
+    if (!p || typeof p !== "object") continue
+    var id = typeof p.id === "string" ? p.id : ""
+    if (!/^[A-Za-z0-9_]{1,64}$/.test(id) || seen[id]) continue
+    var name = cleanPresetName(p.name)
+    if (name === "" || !p.look || typeof p.look !== "object" || isList(p.look)) continue
+    seen[id] = true
+    out.push({ id: id, name: name, look: pickLook(p.look) })
+  }
+  return out
+}
+
 function serializePinned(pinnedIds) {
   var arr = toArray(pinnedIds)
   var cleaned = []
@@ -657,7 +746,7 @@ function windowAddress(handle) {
   return "0x" + value.toLowerCase()
 }
 
-function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimizedWs, minimizedOrigins, appGroups) {
+function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimizedWs, minimizedOrigins, appGroups, terminalHosts) {
   var pinned = toArray(pinnedIds)
   var list = toArray(toplevels)
   var minWs = minimizedWs || "special:minimized"
@@ -734,25 +823,10 @@ function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimi
     for (var j = 0; j < list.length; j++) {
       var item = list[j]
       var entry = entryFor(appRows, item.appId)
-      if (entry && appLibrary) {
-        item.name = appLibrary.entryName(entry)
-        item.icon = appLibrary.iconSource(entry.icon)
-      } else {
-        item.name = item.appId
-        var iconFound = ""
-        if (appLibrary) {
-          var cands = getCandidates(item.appId)
-          for (var k = 0; k < cands.length; k++) {
-            var cand = cands[k]
-            var testSrc = appLibrary.iconSource(cand)
-            if (testSrc && testSrc.indexOf("application-x-executable") < 0) {
-              iconFound = testSrc
-              break
-            }
-          }
-        }
-        item.icon = iconFound
-      }
+      item.name = entry && appLibrary ? appLibrary.entryName(entry) : item.appId
+      var windows = item.windowList || []
+      var host = terminalHosts && windows.length ? terminalHosts[windows[0].address] : ""
+      item.icon = resolveAppIcon(appLibrary, appRows, host || item.appId)
     }
   }
 

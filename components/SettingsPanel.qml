@@ -19,6 +19,19 @@ PanelWindow {
   // Id of the app group whose name is being edited; Esc then cancels the
   // edit instead of closing the panel.
   property string editingGroupId: ""
+  property string editingPresetId: ""
+  property string confirmDeletePresetId: ""
+  // The row of a just-saved preset opens its name for editing.
+  signal presetEditRequested(string id)
+  function startPresetEdit(id) { panel.presetEditRequested(id) }
+  // Leaves a preset rename without saving it. Called before any action that
+  // rebuilds the preset rows, which would drop the field but not the state
+  // (and the Escape shortcut stays off while a rename is open).
+  function endPresetEdit() {
+    if (panel.editingPresetId === "") return
+    panel.editingPresetId = ""
+    keyCatcher.forceActiveFocus()
+  }
 
   // Update channel as reported by `omadock-switch status`; probed on open.
   property string channel: ""
@@ -37,7 +50,7 @@ PanelWindow {
     { id: "size", label: "Size & Spacing", glyph: "󰩨" },
     { id: "folders", label: "Folders", glyph: "󰉋" },
     { id: "groups", label: "App Groups", glyph: "󰀻" },
-    { id: "supporters", label: "Supporters", glyph: "󰆔" },
+    { id: "presets", label: "Presets", glyph: "󰆓" },
     { id: "about", label: "About", glyph: "󰋼" }
   ]
 
@@ -320,7 +333,7 @@ PanelWindow {
   Shortcut {
     sequence: "Escape"
     context: Qt.WindowShortcut
-    enabled: panel.editingGroupId === ""
+    enabled: panel.editingGroupId === "" && panel.editingPresetId === ""
     onActivated: panel.close()
   }
 
@@ -337,11 +350,13 @@ PanelWindow {
     radius: Style.cornerRadius
 
     // Swallow clicks so they never reach the scrim. A click on empty space
-    // also cancels a group rename, since it would not move focus by itself.
+    // also cancels a group or preset rename, since it would not move focus
+    // by itself.
     MouseArea {
       anchors.fill: parent
       acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
       onPressed: {
+        panel.endPresetEdit()
         if (panel.editingGroupId === "") return
         panel.editingGroupId = ""
         keyCatcher.forceActiveFocus()
@@ -753,7 +768,7 @@ PanelWindow {
               label: "Border"
               hint: "Thin rim around the dock."
               checked: root ? root.showBorder : true
-              onToggled: root.setOption("showBorder", !root.showBorder)
+              onToggled: root.setShowBorder(!root.showBorder)
             }
             SliderRow {
               label: "Border width"
@@ -783,6 +798,46 @@ PanelWindow {
               suffix: "%"
               value: root ? Math.max(0, root.borderOpacity) : 1
               onCommitted: function(v) { root.setBorderOpacity(Math.round(v * 100) / 100) }
+            }
+            ChoiceRow {
+              label: "Divider length style"
+              hint: "Classic preserves the original icon-height lines. Long uses an adjustable share of the dock height."
+              visible: root ? !root.splitSections : true
+              options: [{ value: "classic", label: "Classic" }, { value: "long", label: "Long" }]
+              value: root ? root.dividerGeometry : "classic"
+              onPicked: function(v) { root.setOption("dividerGeometry", v) }
+            }
+            ChoiceRow {
+              label: "Divider style"
+              hint: "Theme draws the lines like the border, in its colour, opacity and width. Custom sets the width and opacity by hand."
+              visible: root ? !root.splitSections : true
+              options: (root && !root.showBorder)
+                ? [{ value: "simple", label: "Simple" }, { value: "custom", label: "Custom" }]
+                : [{ value: "simple", label: "Simple" }, { value: "theme", label: "Theme" }, { value: "custom", label: "Custom" }]
+              value: root ? root.dividerStyle : "simple"
+              onPicked: function(v) { root.setDividerStyle(v) }
+            }
+            SliderRow {
+              label: "Divider width"
+              visible: root ? (!root.splitSections && root.dividerStyle === "custom") : false
+              minimum: 1
+              maximum: 6
+              step: 0.5
+              suffix: " px"
+              displayDecimals: 1
+              value: root ? root.dividerWidth : 1.5
+              onCommitted: function(v) { root.setOption("dividerWidth", Math.round(v * 2) / 2) }
+            }
+            SliderRow {
+              label: "Divider opacity"
+              visible: root ? (!root.splitSections && root.dividerStyle === "custom") : false
+              minimum: 0
+              maximum: 1
+              step: 0.05
+              displayScale: 100
+              suffix: "%"
+              value: root ? root.dividerOpacity : 0.4
+              onCommitted: function(v) { root.setOption("dividerOpacity", Math.round(v * 100) / 100) }
             }
 
             SectionLabel { text: "Shape" }
@@ -1091,6 +1146,13 @@ PanelWindow {
               checked: root ? root.iconHoverOriginal : false
               onToggled: root.setOption("iconHoverOriginal", !root.iconHoverOriginal)
             }
+            SwitchRow {
+              label: "Dithered reveal"
+              hint: "The original icon appears cell by cell, rising from the bottom, instead of all at once."
+              visible: root ? (root.iconHoverOriginal && (root.iconStyle === "mono" || root.iconStyle === "dots")) : false
+              checked: root ? root.iconHoverReveal : false
+              onToggled: root.setOption("iconHoverReveal", !root.iconHoverReveal)
+            }
 
             SectionLabel { text: "Motion" }
 
@@ -1099,6 +1161,9 @@ PanelWindow {
               options: [
                 { value: "zoom", label: "Zoom" },
                 { value: "wave", label: "Wave" },
+                { value: "lift", label: "Lift" },
+                { value: "glow", label: "Glow" },
+                { value: "glitch", label: "Glitch" },
                 { value: "off", label: "None" }
               ]
               value: root ? root.hoverEffect : "zoom"
@@ -1148,6 +1213,238 @@ PanelWindow {
               suffix: " px"
               value: root ? root.sectionSpacing : 18
               onCommitted: function(v) { root.setOption("sectionSpacing", Math.round(v)) }
+            }
+            SliderRow {
+              label: "Divider height"
+              hint: "Length of the lines between sections, as a share of the dock's height."
+              visible: root ? (!root.splitSections && root.dividerGeometry === "long") : false
+              minimum: 20
+              maximum: 100
+              step: 5
+              suffix: "%"
+              value: root ? root.dividerHeight : 70
+              onCommitted: function(v) { root.setOption("dividerHeight", Math.round(v)) }
+            }
+          }
+
+          // ================================================= Presets
+          Column {
+            width: parent.width
+            visible: panel.page === "presets"
+
+            Row {
+              width: parent.width
+              SectionLabel { text: "Presets" }
+            }
+
+            Text {
+              width: parent.width
+              topPadding: Style.spacing.xs
+              bottomPadding: Style.spacing.lg
+              text: (root ? root.presets.length : 0) + " of 6 · A preset keeps the look: background, effects, border, dividers, icons, size and spacing."
+              textFormat: Text.PlainText
+              color: Util.alpha(Color.menu.text, 0.55)
+              wrapMode: Text.WordWrap
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            Repeater {
+              model: root ? root.presets : []
+              delegate: Item {
+                id: presetRow
+                required property var modelData
+                readonly property bool editing: panel.editingPresetId === modelData.id
+                readonly property bool confirming: panel.confirmDeletePresetId === modelData.id
+
+                function startEdit() {
+                  panel.editingPresetId = presetRow.modelData.id
+                  presetName.text = presetRow.modelData.name || ""
+                  presetName.forceActiveFocus()
+                  presetName.selectAll()
+                }
+                function finishEdit(save) {
+                  if (!presetRow.editing) return
+                  var next = presetName.text
+                  panel.editingPresetId = ""
+                  keyCatcher.forceActiveFocus()
+                  if (save) root.renamePreset(presetRow.modelData.id, next)
+                }
+
+                Connections {
+                  target: panel
+                  function onPresetEditRequested(id) { if (id === presetRow.modelData.id) presetRow.startEdit() }
+                }
+
+                width: parent ? parent.width : Style.space(420)
+                implicitHeight: Math.max(thumbView.implicitHeight, presetTexts.implicitHeight) + Style.spacing.lg * 2
+
+                // The thumbnail is the Apply button: an accent ring marks the
+                // preset in use, hovering another one offers to apply it.
+                Item {
+                  id: thumbView
+                  readonly property bool active: presetRow.modelData.id === root.activePresetId
+                  implicitWidth: thumbArt.implicitWidth
+                  implicitHeight: thumbArt.implicitHeight
+                  width: implicitWidth
+                  height: implicitHeight
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(4)
+                  anchors.verticalCenter: parent.verticalCenter
+
+                  PresetThumb {
+                    id: thumbArt
+                    anchors.fill: parent
+                    rootRef: root
+                    look: presetRow.modelData.look
+                  }
+
+                  Rectangle {
+                    anchors.fill: parent
+                    radius: Style.space(8)
+                    visible: thumbMouse.containsMouse && !thumbView.active
+                    color: Qt.rgba(0, 0, 0, 0.45)
+                    Text {
+                      anchors.centerIn: parent
+                      text: "Apply"
+                      textFormat: Text.PlainText
+                      color: "#ffffff"
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                    }
+                  }
+
+                  Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -Style.space(3)
+                    radius: Style.space(11)
+                    color: "transparent"
+                    visible: thumbView.active || thumbMouse.containsMouse
+                    border.width: Style.space(2)
+                    border.color: thumbView.active ? Color.accent : Util.alpha(Color.accent, 0.4)
+                  }
+
+                  MouseArea {
+                    id: thumbMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: thumbView.active ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    onClicked: {
+                      panel.endPresetEdit()
+                      root.applyPreset(presetRow.modelData.id)
+                    }
+                  }
+                }
+
+                Column {
+                  id: presetTexts
+                  anchors.left: thumbView.right
+                  anchors.leftMargin: Style.spacing.xl + Style.space(3)
+                  anchors.right: presetActions.left
+                  anchors.rightMargin: Style.spacing.lg
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.spacing.xxs
+
+                  Item {
+                    width: parent.width
+                    height: Math.max(presetLabel.implicitHeight, presetRow.editing ? presetName.implicitHeight : 0)
+
+                    Text {
+                      id: presetLabel
+                      visible: !presetRow.editing
+                      width: parent.width
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: (presetRow.modelData.id === root.activePresetId ? "✓ " : "") + presetRow.modelData.name
+                      textFormat: Text.PlainText
+                      elide: Text.ElideRight
+                      color: presetMouse.containsMouse ? Color.accent : Color.menu.text
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.subtitle
+                    }
+                    MouseArea {
+                      id: presetMouse
+                      visible: !presetRow.editing
+                      anchors.fill: presetLabel
+                      hoverEnabled: true
+                      cursorShape: Qt.IBeamCursor
+                      onClicked: presetRow.startEdit()
+                    }
+                    TextField {
+                      id: presetName
+                      visible: presetRow.editing
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: Math.min(parent.width, Style.space(220))
+                      maximumLength: 40
+                      placeholderText: "Preset name"
+                      foreground: Color.menu.text
+                      Keys.onReturnPressed: presetRow.finishEdit(true)
+                      Keys.onEnterPressed: presetRow.finishEdit(true)
+                      Keys.onEscapePressed: presetRow.finishEdit(false)
+                      onActiveFocusChanged: if (!activeFocus) presetRow.finishEdit(false)
+                    }
+                  }
+                }
+
+                Row {
+                  id: presetActions
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.spacing.md
+
+                  Button {
+                    visible: !presetRow.confirming
+                    text: "Update"
+                    foreground: Color.menu.text
+                    onClicked: { panel.endPresetEdit(); root.updatePreset(presetRow.modelData.id) }
+                  }
+                  Button {
+                    visible: !presetRow.confirming
+                    text: "Delete"
+                    foreground: Color.menu.text
+                    onClicked: { panel.endPresetEdit(); panel.confirmDeletePresetId = presetRow.modelData.id }
+                  }
+                  Button {
+                    visible: presetRow.confirming
+                    // Button text is not pinned to PlainText: no name here.
+                    text: "Delete?"
+                    foreground: Color.urgent
+                    bordered: true
+                    onClicked: {
+                      panel.confirmDeletePresetId = ""
+                      root.deletePreset(presetRow.modelData.id)
+                    }
+                  }
+                  Button {
+                    visible: presetRow.confirming
+                    text: "Keep"
+                    foreground: Color.menu.text
+                    onClicked: panel.confirmDeletePresetId = ""
+                  }
+                }
+
+                Rectangle {
+                  anchors.bottom: parent.bottom
+                  width: parent.width
+                  height: 1
+                  color: Util.alpha(Color.menu.text, 0.10)
+                }
+              }
+            }
+
+            Item { width: 1; height: Style.spacing.xxl }
+
+            Button {
+              text: root && root.canSavePreset ? "Save current look" : "6 of 6 — delete one to save a new look"
+              foreground: Color.menu.text
+              bordered: true
+              enabled: root ? root.canSavePreset : false
+              opacity: enabled ? 1 : 0.5
+              onClicked: {
+                panel.endPresetEdit()
+                var id = root.savePreset("")
+                if (id !== "") Qt.callLater(function() { panel.startPresetEdit(id) })
+              }
             }
           }
 
@@ -1446,12 +1743,48 @@ PanelWindow {
             }
           }
 
-          // ================================================= Supporters
+          // ================================================= About
           Column {
             width: parent.width
-            visible: panel.page === "supporters"
+            visible: panel.page === "about" || panel.page === "supporters"
 
-            SectionLabel { text: "Made with love" }
+            SectionLabel { text: "OmaDock" }
+
+            SettingRow {
+              label: "Version"
+              hint: "Free and open-source application dock for Omarchy · MIT license"
+              Text {
+                text: (root && root.manifest && root.manifest.version) ? "v" + root.manifest.version : "unknown"
+                textFormat: Text.PlainText
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.subtitle
+              }
+            }
+            SettingRow {
+              label: "Project & feedback"
+              hint: "Report bugs, follow development, or contribute."
+              Button {
+                text: "GitHub"
+                foreground: Color.menu.text
+                bordered: true
+                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/thepathless/omadock"))
+              }
+            }
+
+            SectionLabel { text: "Updates" }
+            ChoiceRow {
+              label: "Update channel"
+              hint: "Stable receives verified releases; Experimental gets features early. Switching reloads the shell immediately."
+              options: [{ value: "stable", label: "Stable" }, { value: "experiment", label: "Experimental" }]
+              value: panel.channel !== "" ? panel.channel : "stable"
+              onPicked: function(v) {
+                if (panel.channel === "" || v === panel.channel) return
+                Quickshell.execDetached(["omadock-switch", v === "stable" ? "stable" : "experiment"])
+              }
+            }
+
+            SectionLabel { text: "Supporters & acknowledgments" }
 
             Text {
               width: parent.width
@@ -1614,54 +1947,6 @@ PanelWindow {
             }
           }
 
-          // ================================================= About
-          Column {
-            width: parent.width
-            visible: panel.page === "about"
-
-            SectionLabel { text: "Updates" }
-
-            ChoiceRow {
-              label: "Update channel"
-              hint: "Stable receives verified releases; Experimental gets features early. Switching reloads the shell immediately."
-              options: [
-                { value: "stable", label: "Stable" },
-                { value: "experiment", label: "Experimental" }
-              ]
-              value: panel.channel !== "" ? panel.channel : "stable"
-              onPicked: function(v) {
-                if (panel.channel === "" || v === panel.channel) return
-                Quickshell.execDetached(["omadock-switch", v === "stable" ? "stable" : "experiment"])
-              }
-            }
-
-            SectionLabel { text: "Project" }
-
-            SettingRow {
-              label: "Version"
-              hint: "The Omadock release this dock is running."
-
-              Text {
-                text: (root && root.manifest && root.manifest.version) ? "v" + root.manifest.version : "unknown"
-                textFormat: Text.PlainText
-                color: Color.menu.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.subtitle
-              }
-            }
-
-            SettingRow {
-              label: "Omadock"
-              hint: "A fluid, zero-CPU dock for Omarchy. Report bugs, follow development, or star the repository."
-
-              Button {
-                text: "GitHub"
-                foreground: Color.menu.text
-                bordered: true
-                onClicked: Util.execDetached("uwsm-app -- xdg-open " + Util.shellQuote("https://github.com/thepathless/omadock"))
-              }
-            }
-          }
         }
       }
     }

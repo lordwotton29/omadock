@@ -598,6 +598,7 @@ Item {
 
   property var pinnedIds: []
   property var appRows: []
+  property var terminalHosts: ({})
   property var dockModel: ({ pinned: [], running: [] })
   // Live scan of parked windows for the preview-tile section. Built straight
   // off Hyprland's own toplevel list, so it cannot go stale the way cached
@@ -633,7 +634,7 @@ Item {
     if (root.filterByMonitor) tops = tops.filter(root.isToplevelOnThisMonitor)
     root.dockModel = root.appLibrary
       ? DockModel.buildEntries(root.pinnedIds, tops, root.appRows,
-                               root.appLibrary, root.hyprToplevelFor, root.minimizedWorkspace, root.minimizedOrigins, root.appGroups)
+                               root.appLibrary, root.hyprToplevelFor, root.minimizedWorkspace, root.minimizedOrigins, root.appGroups, root.terminalHosts)
       : { pinned: [], running: [] }
     root.rescanMinimizedWindows()
     root.pruneLaunching()
@@ -800,11 +801,17 @@ Item {
   property bool showTooltips: true
   property bool showMinimizedTiles: true
   // "zoom" grows only the icon under the pointer and leaves the layout alone —
-  // the behaviour this dock shipped with, and the default (README and
-  // loadConfig agree). "wave" is the falloff: neighbours respond and the row
-  // carries the extra width. "off" is no hover growth at all.
+  // the default. "wave" grows neighbours; lift, glow and glitch keep the
+  // icon's size. "off" disables hover effects.
   property string hoverEffect: "zoom"
   readonly property bool waveHover: root.hoverEffect === "wave"
+  // What HoverFx and DockIconArt read, in one object so each dock item
+  // passes a single property.
+  readonly property var hoverFx: ({
+    effect: root.hoverEffect,
+    reveal: root.iconHoverOriginal && root.iconHoverReveal,
+    glow: Color.accent
+  })
   property bool launchBounce: true
   property bool advancedTooltips: true
   property real borderOpacity: -1.0
@@ -910,6 +917,9 @@ Item {
   property real iconStrength: 1
   // With an icon style on: show the hovered icon as shipped.
   property bool iconHoverOriginal: false
+  // With iconHoverOriginal: the original dithers in cell by cell, rising
+  // from the bottom, instead of replacing the styled icon at once.
+  property bool iconHoverReveal: false
   // The mono / dots ink, kept readable against what sits behind the icons
   // (see readableOn): an accent tint over a theme gradient built from that
   // same accent would otherwise vanish into it.
@@ -955,6 +965,27 @@ Item {
   // of the text colour all but vanished on light docks. A light line on a
   // dark dock reads at a lower ratio than a dark one on a light dock, and
   // glares sooner, so it stops earlier.
+  // The dock's rim, shared by the panels and by "theme" dividers.
+  readonly property real rimAlpha: {
+    // Specular Frosted Glass Rim: Crisp highlight with high alpha for contrast on dark and light surfaces
+    var autoAlpha = (root.effectiveDockOpacity < 0.25 || root.dockBgColor === "none")
+      ? 0.48
+      : Math.max(0.24, root.effectiveDockOpacity * 0.35)
+    // Manual override from Settings → Appearance → Border opacity.
+    return root.borderOpacity < 0 ? autoAlpha : Math.max(0.0, Math.min(1.0, root.borderOpacity))
+  }
+  readonly property color rimColor: Util.alpha(root.dockForeground, root.rimAlpha)
+
+  // Divider lines: "simple" is a thin line in dividerColor, "theme" is drawn
+  // like the rim, in its colour, opacity and width, and "custom" in the
+  // rim's colour with its own width and opacity.
+  readonly property color dividerLineColor: root.dividerStyle === "theme" ? root.rimColor
+    : root.dividerStyle === "custom" ? Util.alpha(root.dockForeground, root.dividerOpacity)
+    : root.dividerColor
+  readonly property real dividerLineWidth: root.dividerStyle === "theme" ? root.borderWidth
+    : root.dividerStyle === "custom" ? root.dividerWidth
+    : Style.space(1)
+
   readonly property color dividerColor: {
     var bg = Qt.color(root.iconBackdropColor)
     var ink = root.blackOrWhiteOn(bg)
@@ -1049,6 +1080,12 @@ Item {
   property int itemSpacing: 4
   // Gap between the panels when sections are split.
   property int sectionSpacing: 18
+  // Length of the section divider lines, in percent of the dock's height.
+  property string dividerGeometry: "classic"
+  property int dividerHeight: 70
+  property string dividerStyle: "simple"
+  property real dividerWidth: 1.5
+  property real dividerOpacity: 0.4
   property string minimizeMode: "active"
   readonly property bool clickToMinimize: root.minimizeMode !== "off"
   property bool showUrgentHint: true
@@ -1086,6 +1123,29 @@ Item {
     id: modelTimer
     interval: 40
     onTriggered: root.refreshDock()
+  }
+
+  // Process identity survives TUI app-id overrides. Scan only on window-list
+  // changes, never while idle; the helper follows at most eight parent PIDs.
+  Timer {
+    id: terminalHostDebounce
+    interval: 100
+    onTriggered: if (!terminalHostScan.running) terminalHostScan.running = true
+  }
+
+  Process {
+    id: terminalHostScan
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/terminal-hosts.py").toString().replace(/^file:\/\//, ""))]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          root.terminalHosts = JSON.parse(text) || ({})
+          modelTimer.restart()
+        } catch (e) {
+          console.warn("[omadock] Failed resolving terminal hosts:", e)
+        }
+      }
+    }
   }
 
   // One-shot deferred rebuild after park/restore moves and configreloaded events,
@@ -1785,6 +1845,7 @@ Item {
     target: Hyprland.toplevels
     function onValuesChanged() {
       modelTimer.restart()
+      terminalHostDebounce.restart()
     }
   }
 
@@ -1824,6 +1885,8 @@ Item {
       // A config reload drops runtime layer rules along with the Lua state.
       if (n === "configreloaded") {
         root.applyBlurRule(true)
+        modelSettleTimer.restart()
+        terminalHostDebounce.restart()
         return
       }
       if (n === "openwindow") {
@@ -2041,6 +2104,82 @@ Item {
     root.pinnedIds = DockModel.parsePinned(DockModel.readCapped(dockFile.text, DockModel.MAX_DOCK_JSON_BYTES))
   }
 
+  // The look: every value a preset holds, parsed and clamped exactly as the
+  // config file is. Used when the config loads and when a preset applies.
+  // Sets properties only; callers save and update the blur rule.
+  function applyLook(parsed) {
+    // Migrates the old boolean: an explicit magnification:false meant no growth.
+    root.hoverEffect = parsed && ["zoom", "wave", "lift", "glow", "glitch", "off"].indexOf(parsed.hoverEffect) >= 0
+      ? parsed.hoverEffect
+      : ((parsed && parsed.magnification === false) ? "off" : "zoom")
+    root.launchBounce = parsed && parsed.launchBounce !== false
+    root.configuredIconSize = parsed && typeof parsed.iconSize === "number" && isFinite(parsed.iconSize) && parsed.iconSize > 0
+      ? Math.max(16, Math.min(96, Math.round(parsed.iconSize))) : 0
+    if (parsed && (parsed.opacity === "theme" || parsed.opacity === "auto" || parsed.opacity === -1)) {
+      root.dockOpacity = -1.0
+    } else if (parsed && typeof parsed.opacity === "number") {
+      root.dockOpacity = Math.max(0.0, Math.min(1.0, parsed.opacity))
+    } else {
+      root.dockOpacity = 1.0
+    }
+    if (parsed && (parsed.borderOpacity === "theme" || parsed.borderOpacity === "auto" || parsed.borderOpacity === -1)) {
+      root.borderOpacity = -1.0
+    } else if (parsed && typeof parsed.borderOpacity === "number") {
+      root.borderOpacity = Math.max(0.0, Math.min(1.0, parsed.borderOpacity))
+    } else {
+      root.borderOpacity = -1.0
+    }
+    root.dockShape = parsed && typeof parsed.shape === "string" ? parsed.shape : "rounded"
+    root.cornerRadius = parsed && typeof parsed.cornerRadius === "number" && isFinite(parsed.cornerRadius) && parsed.cornerRadius >= 0
+      ? Math.max(2, Math.round(parsed.cornerRadius)) : -1
+    root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
+    root.showBackground = parsed ? parsed.showBackground !== false : true
+    root.bgFill = (parsed && parsed.bgFill === "gradient") ? "gradient" : "solid"
+    root.gradientPreset = parsed && typeof parsed.gradientPreset === "string" ? parsed.gradientPreset : "theme"
+    root.gradientStrength = parsed && typeof parsed.gradientStrength === "number" ? Math.max(0, Math.min(1, parsed.gradientStrength)) : 0.6
+    root.grain = parsed && typeof parsed.grain === "number" ? Math.max(0, Math.min(1, parsed.grain)) : 0
+    root.showShadow = parsed ? parsed.showShadow !== false : true
+    root.splitSections = parsed ? parsed.splitSections === true : false
+    root.shadowStrength = parsed && typeof parsed.shadowStrength === "number"
+      ? Math.max(0, Math.min(1, parsed.shadowStrength))
+      : 0.4
+    root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
+    root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
+    root.iconTint = (parsed && (parsed.iconTint === "accent" || parsed.iconTint === "bw")) ? parsed.iconTint : "text"
+    root.iconHoverOriginal = parsed ? parsed.iconHoverOriginal === true : false
+    root.iconHoverReveal = parsed ? parsed.iconHoverReveal === true : false
+    root.iconContrast = parsed && typeof parsed.iconContrast === "number" ? Math.max(0, Math.min(1, parsed.iconContrast)) : 0
+    root.iconStrength = parsed && typeof parsed.iconStrength === "number" ? Math.max(0, Math.min(1, parsed.iconStrength)) : 1
+    root.iconGrid = parsed && typeof parsed.iconGrid === "number"
+      ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
+      : 16
+    root.showBorder = parsed ? parsed.showBorder !== false : true
+    root.indicatorShape = (parsed && (parsed.indicatorShape === "rounded" || parsed.indicatorShape === "square")) ? parsed.indicatorShape : "theme"
+    root.borderWidth = parsed && typeof parsed.borderWidth === "number"
+      ? Math.max(1, Math.min(6, parsed.borderWidth))
+      : 1.5
+    // Anything else, including the retired "theme" style, falls back to rounded.
+    root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
+    root.groupIconEffects = (parsed && parsed.groupIconEffects === "none") ? "none" : "theme"
+    root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
+    root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" && isFinite(parsed.itemSpacing)
+      ? Math.max(0, Math.min(32, Math.round(parsed.itemSpacing))) : 4
+    root.sectionSpacing = parsed && typeof parsed.sectionSpacing === "number" ? Math.max(0, Math.min(48, Math.round(parsed.sectionSpacing))) : 18
+    root.dividerGeometry = parsed && parsed.dividerGeometry === "long" ? "long" : "classic"
+    root.dividerHeight = parsed && typeof parsed.dividerHeight === "number" && isFinite(parsed.dividerHeight) ? Math.max(20, Math.min(100, Math.round(parsed.dividerHeight))) : 70
+    root.dividerStyle = parsed && ["theme", "custom"].indexOf(parsed.dividerStyle) >= 0 ? parsed.dividerStyle : "simple"
+    root.dividerWidth = parsed && typeof parsed.dividerWidth === "number" && isFinite(parsed.dividerWidth) ? Math.max(1, Math.min(6, Math.round(parsed.dividerWidth * 2) / 2)) : 1.5
+    root.dividerOpacity = parsed && typeof parsed.dividerOpacity === "number" && isFinite(parsed.dividerOpacity) ? Math.max(0, Math.min(1, parsed.dividerOpacity)) : 0.4
+    // Theme dividers without a border, saved before they turned custom.
+    // Converted in place: saving here would write the rest of the config
+    // before it is read.
+    if (root.dividerStyle === "theme" && !root.showBorder) {
+      root.dividerWidth = root.borderWidth
+      root.dividerOpacity = Math.round(root.rimAlpha * 100) / 100
+      root.dividerStyle = "custom"
+    }
+  }
+
   function loadConfig() {
     var raw = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
     var parsed = {}
@@ -2062,71 +2201,20 @@ Item {
     } else {
       root.appGroups = []
     }
+    root.presets = parsed ? DockModel.boundPresets(parsed.presets) : []
     root.autohide = parsed && parsed.autohide !== false
     root.intelligentAutohide = parsed && parsed.intelligentAutohide !== false
     root.showAppsButton = parsed && parsed.showAppsButton !== false
     root.showTooltips = parsed && parsed.showTooltips !== false
     root.showMinimizedTiles = parsed ? parsed.showMinimizedTiles !== false : true
-    // Migrates the old boolean: an explicit magnification:false meant no growth.
-    root.hoverEffect = parsed && typeof parsed.hoverEffect === "string"
-      ? parsed.hoverEffect
-      : ((parsed && parsed.magnification === false) ? "off" : "zoom")
-    root.launchBounce = parsed && parsed.launchBounce !== false
     root.advancedTooltips = parsed && parsed.advancedTooltips !== false
     root.screenName = parsed && typeof parsed.screen === "string" ? parsed.screen : ""
     root.multiMonitor = parsed ? parsed.multiMonitor === true : false
     root.perMonitorApps = parsed ? parsed.perMonitorApps !== false : true
-    root.configuredIconSize = parsed && typeof parsed.iconSize === "number" ? parsed.iconSize : 0
-    if (parsed && (parsed.opacity === "theme" || parsed.opacity === "auto" || parsed.opacity === -1)) {
-      root.dockOpacity = -1.0
-    } else if (parsed && typeof parsed.opacity === "number") {
-      root.dockOpacity = Math.max(0.0, Math.min(1.0, parsed.opacity))
-    } else {
-      root.dockOpacity = 1.0
-    }
-    if (parsed && (parsed.borderOpacity === "theme" || parsed.borderOpacity === "auto" || parsed.borderOpacity === -1)) {
-      root.borderOpacity = -1.0
-    } else if (parsed && typeof parsed.borderOpacity === "number") {
-      root.borderOpacity = Math.max(0.0, Math.min(1.0, parsed.borderOpacity))
-    } else {
-      root.borderOpacity = -1.0
-    }
-    root.dockShape = parsed && typeof parsed.shape === "string" ? parsed.shape : "rounded"
-    root.cornerRadius = parsed && typeof parsed.cornerRadius === "number" ? Math.max(2, Math.round(parsed.cornerRadius)) : -1
-    root.dockBgColor = parsed && typeof parsed.bgColor === "string" ? parsed.bgColor : "theme"
-    root.showBackground = parsed ? parsed.showBackground !== false : true
-    root.bgFill = (parsed && parsed.bgFill === "gradient") ? "gradient" : "solid"
-    root.gradientPreset = parsed && typeof parsed.gradientPreset === "string" ? parsed.gradientPreset : "theme"
-    root.gradientStrength = parsed && typeof parsed.gradientStrength === "number" ? Math.max(0, Math.min(1, parsed.gradientStrength)) : 0.6
-    root.grain = parsed && typeof parsed.grain === "number" ? Math.max(0, Math.min(1, parsed.grain)) : 0
-    root.showShadow = parsed ? parsed.showShadow !== false : true
-    root.splitSections = parsed ? parsed.splitSections === true : false
-    root.shadowStrength = parsed && typeof parsed.shadowStrength === "number"
-      ? Math.max(0, Math.min(1, parsed.shadowStrength))
-      : 0.4
-    root.blurMode = (parsed && (parsed.blur === "on" || parsed.blur === "off")) ? parsed.blur : "system"
-    root.iconStyle = (parsed && ["mono", "pixel", "dots"].indexOf(parsed.iconStyle) >= 0) ? parsed.iconStyle : "original"
-    root.iconTint = (parsed && (parsed.iconTint === "accent" || parsed.iconTint === "bw")) ? parsed.iconTint : "text"
-    root.iconHoverOriginal = parsed ? parsed.iconHoverOriginal === true : false
-    root.iconContrast = parsed && typeof parsed.iconContrast === "number" ? Math.max(0, Math.min(1, parsed.iconContrast)) : 0
-    root.iconStrength = parsed && typeof parsed.iconStrength === "number" ? Math.max(0, Math.min(1, parsed.iconStrength)) : 1
-    root.iconGrid = parsed && typeof parsed.iconGrid === "number"
-      ? Math.max(8, Math.min(32, Math.round(parsed.iconGrid)))
-      : 16
+    root.applyLook(parsed)
     root.blurSize = parsed && typeof parsed.blurSize === "number" ? Math.max(0, Math.min(20, Math.round(parsed.blurSize))) : 0
     root.systemBlurSize = parsed && typeof parsed.systemBlurSize === "number" ? Math.max(0, Math.round(parsed.systemBlurSize)) : 0
     root.applyBlurRule(false)
-    root.showBorder = parsed ? parsed.showBorder !== false : true
-    root.indicatorShape = (parsed && (parsed.indicatorShape === "rounded" || parsed.indicatorShape === "square")) ? parsed.indicatorShape : "theme"
-    root.borderWidth = parsed && typeof parsed.borderWidth === "number"
-      ? Math.max(1, Math.min(6, parsed.borderWidth))
-      : 1.5
-    // Anything else, including the retired "theme" style, falls back to rounded.
-    root.groupStyle = (parsed && ["square", "none"].indexOf(parsed.groupStyle) >= 0) ? parsed.groupStyle : "rounded"
-    root.groupIconEffects = (parsed && parsed.groupIconEffects === "none") ? "none" : "theme"
-    root.folderColor = parsed && typeof parsed.folderColor === "string" ? parsed.folderColor : "theme"
-    root.itemSpacing = parsed && typeof parsed.itemSpacing === "number" ? parsed.itemSpacing : 4
-    root.sectionSpacing = parsed && typeof parsed.sectionSpacing === "number" ? Math.max(0, Math.min(48, Math.round(parsed.sectionSpacing))) : 18
     if (parsed && typeof parsed.minimizeMode === "string") {
       root.minimizeMode = parsed.minimizeMode
     } else if (parsed && parsed.clickToMinimize === true) {
@@ -2154,6 +2242,7 @@ Item {
   }
 
   function rescanApps() {
+    terminalHostDebounce.restart()
     root.appRows = root.appLibrary ? root.appLibrary.sortedEntries("") : []
     root.refreshDock()
   }
@@ -2489,6 +2578,25 @@ Item {
   // Plain value settings from the settings panel: set, persist.
   function setOption(key, value) {
     root[key] = value
+    root.saveConfig()
+  }
+
+  // Leaving "theme" for "custom" starts from the rim's width and opacity, so
+  // the lines look the same until changed.
+  function setDividerStyle(style) {
+    if (style === "custom" && root.dividerStyle === "theme") {
+      root.dividerWidth = root.borderWidth
+      root.dividerOpacity = Math.round(root.rimAlpha * 100) / 100
+    }
+    root.dividerStyle = style
+    root.saveConfig()
+  }
+
+  // "theme" dividers follow the rim, so they turn "custom" when it goes
+  // away: they keep their look and stay adjustable.
+  function setShowBorder(show) {
+    if (!show && root.dividerStyle === "theme") root.setDividerStyle("custom")
+    root.showBorder = show
     root.saveConfig()
   }
 
@@ -3302,15 +3410,9 @@ Item {
     if (remaining === 0) launchPruneTimer.stop()
   }
 
-  function saveConfig() {
-    var conf = {}
-    try {
-      var txt = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
-      if (txt) conf = JSON.parse(txt) || {}
-    } catch (e) {
-      console.warn("[omadock] Failed parsing omadock.json for save, rebuilding:", e)
-      conf = {}
-    }
+  // Reads no file, so bindings can use the current configuration.
+  function buildConfig(base) {
+    var conf = base && typeof base === "object" && !Array.isArray(base) ? base : {}
     conf.alignment = root.alignment || "center"
     delete conf.position
     conf.showRemovableDrives = root.showRemovableDrives
@@ -3351,6 +3453,7 @@ Item {
     conf.iconStyle = root.iconStyle
     conf.iconTint = root.iconTint
     conf.iconHoverOriginal = root.iconHoverOriginal
+    conf.iconHoverReveal = root.iconHoverReveal
     conf.iconContrast = root.iconContrast
     conf.iconStrength = root.iconStrength
     conf.iconGrid = root.iconGrid
@@ -3362,6 +3465,11 @@ Item {
     conf.folderColor = root.folderColor
     conf.itemSpacing = root.itemSpacing
     conf.sectionSpacing = root.sectionSpacing
+    conf.dividerGeometry = root.dividerGeometry
+    conf.dividerHeight = root.dividerHeight
+    conf.dividerStyle = root.dividerStyle
+    conf.dividerWidth = root.dividerWidth
+    conf.dividerOpacity = root.dividerOpacity
     conf.minimizeMode = root.minimizeMode
     conf.clickToMinimize = root.minimizeMode !== "off"
     conf.showUrgentHint = root.showUrgentHint
@@ -3371,9 +3479,126 @@ Item {
     conf.revealDelay = root.revealDelay
     conf.tooltipDelay = root.tooltipDelay
     conf.pinnedFolders = DockModel.boundPinnedFolders(root.pinnedFolders)
+    conf.presets = DockModel.boundPresets(root.presets)
+    return conf
+  }
+
+  // The current look as a preset stores it.
+  readonly property var currentLook: DockModel.pickLook(root.buildConfig({}))
+
+  function saveConfig() {
+    var conf = {}
+    try {
+      var txt = DockModel.readCapped(configFile.text, DockModel.MAX_CONFIG_BYTES).trim()
+      if (txt) conf = JSON.parse(txt) || {}
+    } catch (e) {
+      console.warn("[omadock] Failed parsing omadock.json for save, rebuilding:", e)
+      conf = {}
+    }
+    conf = root.buildConfig(conf)
     root._savingConfig = true
     configFile.setText(JSON.stringify(conf, null, 2))
     Qt.callLater(function() { root._savingConfig = false })
+  }
+
+  // ------------------------------------------------- appearance presets
+  // Named copies of the look (DockModel.LOOK_KEYS), at most six, kept in the
+  // config. Applying one goes through applyLook, like loading the config.
+  property var presets: []
+  readonly property bool canSavePreset: (root.presets || []).length < DockModel.MAX_PRESETS
+  readonly property string activePresetId: {
+    var cur = root.currentLook
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++)
+      if (list[i] && DockModel.lookIncludes(cur, list[i].look)) return list[i].id
+    return ""
+  }
+
+  function presetIndex(id) {
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return i
+    return -1
+  }
+
+  // The preset with this name, ignoring case; "" when none or the name is
+  // longer than a preset name can be.
+  function presetIdByName(name) {
+    var raw = String(name == null ? "" : name).trim()
+    if (raw === "" || raw.length > DockModel.MAX_PRESET_NAME) return ""
+    var want = DockModel.cleanPresetName(raw).toLowerCase()
+    var list = root.presets || []
+    for (var i = 0; i < list.length; i++)
+      if (list[i] && list[i].name.toLowerCase() === want) return list[i].id
+    return ""
+  }
+
+  function presetNameTaken(name, exceptId) {
+    var id = root.presetIdByName(name)
+    return id !== "" && id !== exceptId
+  }
+
+  function nextPresetName() {
+    for (var n = 1; n <= DockModel.MAX_PRESETS + 1; n++)
+      if (!root.presetNameTaken("Preset " + n, "")) return "Preset " + n
+    return "Preset"
+  }
+
+  function replacePreset(i, preset) {
+    var next = root.presets.slice()
+    next[i] = preset
+    root.presets = next
+    root.saveConfig()
+  }
+
+  // A new preset from the current look; returns its id, or "" when the list
+  // is full. A missing or taken name becomes "Preset N".
+  function savePreset(name) {
+    if (!root.canSavePreset) return ""
+    var clean = DockModel.cleanPresetName(name)
+    if (clean === "" || root.presetNameTaken(clean, "")) clean = root.nextPresetName()
+    var id = "preset_" + Date.now()
+    while (root.presetIndex(id) >= 0) id += "0"
+    root.presets = (root.presets || []).concat([{ id: id, name: clean, look: root.currentLook }])
+    root.saveConfig()
+    return id
+  }
+
+  // Refuses an empty name or one another preset has.
+  function renamePreset(id, name) {
+    var i = root.presetIndex(id)
+    var clean = DockModel.cleanPresetName(name)
+    if (i < 0 || clean === "" || root.presetNameTaken(clean, id)) return false
+    var p = root.presets[i]
+    root.replacePreset(i, { id: p.id, name: clean, look: p.look })
+    return true
+  }
+
+  function updatePreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    var p = root.presets[i]
+    root.replacePreset(i, { id: p.id, name: p.name, look: root.currentLook })
+    return true
+  }
+
+  function deletePreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    var next = root.presets.slice()
+    next.splice(i, 1)
+    root.presets = next
+    root.saveConfig()
+    return true
+  }
+
+  // Keys a preset lacks (saved before they existed) keep their current value.
+  function applyPreset(id) {
+    var i = root.presetIndex(id)
+    if (i < 0) return false
+    root.applyLook(Object.assign({}, root.currentLook, root.presets[i].look))
+    root.applyBlurRule(false)
+    root.saveConfig()
+    return true
   }
 
   // ------------------------------------------------- what a click means

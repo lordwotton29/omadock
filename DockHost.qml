@@ -115,6 +115,25 @@ Item {
   IpcHandler {
     target: "omadock"
 
+    // Read-only diagnostics for bug reports and live verification.
+    function status(): string {
+      return JSON.stringify({
+        version: host.manifest ? host.manifest.version : "unknown",
+        docks: host.orderedDocks().map(function(d) {
+          return {
+            screen: d.dockScreen ? d.dockScreen.name : "",
+            visible: d.dockVisible,
+            dividerGeometry: d.dividerGeometry,
+            dividerStyle: d.dividerStyle,
+            hoverEffect: d.hoverEffect,
+            activePresetId: d.activePresetId,
+            terminalHosts: d.terminalHosts,
+            model: d.dockModel
+          }
+        })
+      })
+    }
+
     function minimizeActive(): void {
       var d = host.orderedDocks()
       if (d.length > 0) d[0].minimizeActive()
@@ -170,6 +189,14 @@ Item {
     function setPosition(pos: string): void {
       var d = host.orderedDocks()
       if (d.length > 0) d[0].setDockPosition(pos)
+    }
+
+    // Applies a saved appearance preset by name, ignoring case.
+    function applyPreset(name: string): string {
+      var d = host.orderedDocks()
+      if (d.length === 0) return "not found"
+      var id = d[0].presetIdByName(String(name))
+      return (id !== "" && d[0].applyPreset(id)) ? "ok" : "not found"
     }
   }
 }
