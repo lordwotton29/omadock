@@ -1027,6 +1027,12 @@ PanelWindow {
             SectionLabel { text: "Attention" }
 
             SwitchRow {
+              label: "Notification badges"
+              hint: "Count active notification popups on pinned apps; clears on dismissal or expiry."
+              checked: root ? root.showNotificationBadges : true
+              onToggled: root.setOption("showNotificationBadges", !root.showNotificationBadges)
+            }
+            SwitchRow {
               label: "Urgent highlights"
               hint: "Mark apps whose windows ask for attention."
               checked: root ? root.showUrgentHint : true

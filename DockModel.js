@@ -90,8 +90,42 @@ function extractNotificationWebDomain(body, summary) {
   return ""
 }
 
+// Omarchy's TUI launcher uses the command name, while Antigravity's
+// desktop entry uses the product name. Keep this alias exact, not fuzzy.
+function cliAppId(id) {
+  var raw = stripDesktop(id)
+  if (/^(?:org\.omarchy\.)?agy$/i.test(raw)) return "antigravity"
+  if (/^org\.omarchy\.btop(?:-.*)?$/i.test(raw)) return "btop"
+  return raw
+}
+
+function knownCliNotification(row) {
+  var app = String(row && row.app || "").trim()
+  if (/^(?:org\.omarchy\.)?agy$/i.test(app) || /^antigravity$/i.test(app)) return "antigravity"
+  if (/^(?:org\.omarchy\.)?btop(?:-.*)?$/i.test(app)) return "btop"
+  return ""
+}
+
+// The two CLI products the dock learns to identify. Nothing else takes the
+// TUI app-id launch path — every other terminal entry launches normally.
+function isKnownCli(id) {
+  var raw = cliAppId(id).toLowerCase()
+  return raw === "antigravity" || raw === "btop"
+}
+
+// Every id a badge count may be filed under for one dock item. CLI products
+// arrive under several spellings (pin id, TUI app-id, product name); keeping
+// the list here means DockItem never has to know the mapping.
+function notificationAliasIds(appId) {
+  var raw = String(appId == null ? "" : appId)
+  var canonical = cliAppId(raw).toLowerCase()
+  if (canonical === "antigravity") return [raw, "antigravity", "agy", "org.omarchy.agy"]
+  if (canonical === "btop") return [raw, "btop", "org.omarchy.btop"]
+  return [raw]
+}
+
 function getCandidates(id) {
-  var raw = stripDesktop(id).toLowerCase()
+  var raw = cliAppId(id).toLowerCase()
   if (!raw) return []
   var list = [raw]
 
@@ -136,8 +170,8 @@ function getCandidates(id) {
 
 function isAppMatch(idA, idB) {
   if (!idA || !idB) return false
-  var a = stripDesktop(idA).toLowerCase()
-  var b = stripDesktop(idB).toLowerCase()
+  var a = cliAppId(idA).toLowerCase()
+  var b = cliAppId(idB).toLowerCase()
   if (a === b) return true
 
   var candsA = getCandidates(a)
@@ -155,6 +189,21 @@ function isAppMatch(idA, idB) {
 
 function findNotificationTargets(allEntries, appRows, row) {
   if (!row || !allEntries || allEntries.length === 0) return []
+  var attributed = []
+  function add(entry) {
+    if (entry && attributed.indexOf(entry) < 0) attributed.push(entry)
+  }
+  // Map exact Omarchy TUI app-ids and the native Antigravity CLI name,
+  // independent of window-list folding or the generic terminal host.
+  var cliTarget = knownCliNotification(row)
+    || (/^antigravity$/i.test(String(row.app || "").trim()) ? "antigravity" : "")
+  if (cliTarget) {
+    for (var c = 0; c < allEntries.length; c++) {
+      var candidate = allEntries[c]
+      if (candidate && isAppMatch(candidate.appId || candidate.id, cliTarget)) add(candidate)
+    }
+    if (attributed.length) return attributed
+  }
 
   var appName = String(row.app || "").trim()
   var appIcon = String(row.appIcon || "").trim()
@@ -280,6 +329,21 @@ function findNotificationTargets(allEntries, appRows, row) {
   return standardMatches
 }
 
+// A fresh count of active popups, not unread messages or notification history.
+// Rebuilding from the model handles replacements and removals without drift.
+function notificationCounts(entries, appRows, rows) {
+  var counts = {}
+  if (!Array.isArray(rows)) return counts
+  for (var i = 0; i < Math.min(rows.length, 512); i++) {
+    var matches = findNotificationTargets(entries, appRows, rows[i])
+    for (var m = 0; m < matches.length; m++) {
+      var id = matches[m].appId || matches[m].id
+      if (matches[m].pinned && id) counts[id] = (counts[id] || 0) + 1
+    }
+  }
+  return counts
+}
+
 function parsePinned(raw) {
   var text = String(raw == null ? "" : raw).trim()
   if (!text) return []
@@ -293,10 +357,11 @@ function parsePinned(raw) {
   }
   if (!parsed || typeof parsed !== "object") return []
 
-  var arr = isList(parsed) ? parsed : (isList(parsed.pinned) ? parsed.pinned : [])
+  var arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.pinned) ? parsed.pinned : [])
   var out = []
-  var seen = {}
-  for (var i = 0; i < arr.length; i++) {
+  var seen = Object.create(null)
+  for (var i = 0; i < Math.min(arr.length, 256); i++) {
+    if (typeof arr[i] !== "string" || arr[i].length > 512) continue
     var id = stripDesktop(arr[i])
     if (!id || seen[id]) continue
     seen[id] = true
@@ -689,7 +754,7 @@ function moveBefore(list, from, insertIndex) {
 }
 
 function entryFor(appRows, appId) {
-  var want = stripDesktop(appId)
+  var want = cliAppId(appId)
   if (!want || !appRows) return null
   var wantLower = want.toLowerCase()
 
@@ -746,7 +811,7 @@ function windowAddress(handle) {
   return "0x" + value.toLowerCase()
 }
 
-function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimizedWs, minimizedOrigins, appGroups, terminalHosts) {
+function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimizedWs, minimizedOrigins, appGroups, terminalHosts, terminalApps) {
   var pinned = toArray(pinnedIds)
   var list = toArray(toplevels)
   var minWs = minimizedWs || "special:minimized"
@@ -775,7 +840,9 @@ function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimi
     var toplevel = list[i]
     if (!toplevel) continue
     var h = hyprFor ? hyprFor(toplevel) : null
-    var appId = stripDesktop(toplevel.appId)
+    var address = windowAddress(h)
+    var cliApp = terminalApps && address ? terminalApps[address] : ""
+    var appId = cliApp ? stripDesktop(cliApp) : stripDesktop(toplevel.appId)
     var hyprClass = (h && h.lastIpcObject) ? (h.lastIpcObject["class"] || h.lastIpcObject["initialClass"] || "") : ""
     if (!appId && hyprClass) appId = stripDesktop(hyprClass)
     if (!appId && toplevel.title) appId = stripDesktop(toplevel.title)
@@ -826,7 +893,8 @@ function buildEntries(pinnedIds, toplevels, appRows, appLibrary, hyprFor, minimi
       item.name = entry && appLibrary ? appLibrary.entryName(entry) : item.appId
       var windows = item.windowList || []
       var host = terminalHosts && windows.length ? terminalHosts[windows[0].address] : ""
-      item.icon = resolveAppIcon(appLibrary, appRows, host || item.appId)
+      // Application artwork wins; the actual terminal fills only a generic or missing icon.
+      item.icon = resolveAppIcon(appLibrary, appRows, item.appId, host)
     }
   }
 
@@ -1080,8 +1148,9 @@ function resolveFileItemIcon(iconName, themeName, folderColorMode, appLibrary) {
   return appLibrary ? appLibrary.iconSource("text-x-generic") : "file:///usr/share/icons/Yaru/256x256/mimetypes/text-x-generic.png"
 }
 
-function resolveAppIcon(appLibrary, appRows, appId) {
-  var id = String(appId || "").trim()
+function resolveAppIcon(appLibrary, appRows, appId, terminalHost) {
+  var originalId = String(appId || "").trim()
+  var id = cliAppId(originalId)
   if (!id) return appLibrary ? appLibrary.iconSource("application-x-executable") : ""
 
   // 1. If an absolute file path is passed
@@ -1108,16 +1177,27 @@ function resolveAppIcon(appLibrary, appRows, appId) {
     if (directSrc && directSrc.indexOf("application-x-executable") < 0) return directSrc
   }
 
-  // 4. Try Quickshell.iconPath fallback
+  // 4. Keep a theme-resolved app icon, but let a known terminal replace only
+  // Quickshell's generic placeholder when the application itself is unknown.
+  var genericIcon = ""
   try {
     var qp = Quickshell.iconPath(entry && entry.icon ? entry.icon : id, true)
-    if (qp && qp !== "") return qp
+    if (qp && qp !== "") {
+      if (qp.indexOf("application-x-executable") < 0) return qp
+      genericIcon = qp
+    }
   } catch (e) {
-    // Quickshell iconPath fallback failed; proceed to ultimate fallback
     console.warn("[omadock] iconPath fallback failed for", id, e)
   }
 
-  // 5. Ultimate fallback
+  // 5. A known hosting terminal is preferable only to a generic/missing app icon.
+  if (terminalHost && terminalHost !== id) {
+    var terminalIcon = resolveAppIcon(appLibrary, appRows, terminalHost)
+    if (terminalIcon && terminalIcon.indexOf("application-x-executable") < 0) return terminalIcon
+  }
+
+  // 6. Ultimate fallback
+  if (genericIcon) return genericIcon
   if (appLibrary) {
     var fallback = appLibrary.iconSource("application-x-executable")
     if (fallback) return fallback

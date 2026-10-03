@@ -274,6 +274,16 @@ Item {
       // Redirect stdout and stderr to /dev/null so spawned applications don't inherit
       // transient QProcess pipes that close when gtk-launch exits (causing EPIPE crashes).
       var args = ["bash", "-c", "exec uwsm-app -- gtk-launch -- \"$1\" >/dev/null 2>&1", "_", id + ".desktop"]
+      var desktop = DockModel.entryFor(root.appRows, id)
+      // GTK's generic terminal launch loses the CLI app-id, so a known CLI
+      // product would come back wearing its terminal's identity. Route only
+      // those two through Omarchy's TUI wrapper with the already parsed argv;
+      // every other terminal entry keeps its normal launch path.
+      if (desktop && DockModel.isKnownCli(id) && desktop.runInTerminal && desktop.command && desktop.command.length > 0) {
+        var tuiCommand = ["omarchy-launch-tui", "--app-id=org.omarchy." + id].concat(DockModel.toArray(desktop.command))
+        args = ["bash", "-c", 'cd -- "$1" || exit; shift; exec "$@" >/dev/null 2>&1',
+                "_", desktop.workingDirectory || Quickshell.env("HOME")].concat(tuiCommand)
+      }
       // gtk-launch exits non-zero up front when the desktop file no longer
       // resolves (stale pin, uninstalled app), but execDetached cannot
       // observe exit codes. Launches run through launchProc so failures
@@ -599,6 +609,7 @@ Item {
   property var pinnedIds: []
   property var appRows: []
   property var terminalHosts: ({})
+  property var terminalApps: ({})
   property var dockModel: ({ pinned: [], running: [] })
   // Live scan of parked windows for the preview-tile section. Built straight
   // off Hyprland's own toplevel list, so it cannot go stale the way cached
@@ -634,11 +645,12 @@ Item {
     if (root.filterByMonitor) tops = tops.filter(root.isToplevelOnThisMonitor)
     root.dockModel = root.appLibrary
       ? DockModel.buildEntries(root.pinnedIds, tops, root.appRows,
-                               root.appLibrary, root.hyprToplevelFor, root.minimizedWorkspace, root.minimizedOrigins, root.appGroups, root.terminalHosts)
+                               root.appLibrary, root.hyprToplevelFor, root.minimizedWorkspace, root.minimizedOrigins, root.appGroups, root.terminalHosts, root.terminalApps)
       : { pinned: [], running: [] }
     root.rescanMinimizedWindows()
     root.pruneLaunching()
     root.pruneWindowState()
+    notificationBadgeTimer.restart()
   }
 
   function rescanMinimizedWindows() {
@@ -671,7 +683,7 @@ Item {
     // every tile delegate on unrelated events, eating clicks and forcing
     // pointless capture re-negotiations.
     var sig = ""
-    for (var s = 0; s < mins.length; s++) sig += mins[s].address + ","
+    for (var s = 0; s < mins.length; s++) sig += JSON.stringify([mins[s].address, mins[s].title, mins[s].appId]) + ","
     if (sig !== root._minimizedSig) {
       root._minimizedSig = sig
       root.minimizedWindows = mins
@@ -1093,6 +1105,9 @@ Item {
   readonly property bool clickToMinimize: root.minimizeMode !== "off"
   property bool showUrgentHint: true
   property bool urgentOnNotification: true
+  property bool showNotificationBadges: true
+  property var notificationBadges: ({})
+  property var notificationPopupRows: []
   property bool urgentSound: true
   property string urgentSoundName: "bell"
   property var notifService: null
@@ -1130,24 +1145,26 @@ Item {
     onTriggered: root.refreshDock()
   }
 
-  // Process identity survives TUI app-id overrides. Scan only on window-list
-  // changes, never while idle; the helper follows at most eight parent PIDs.
+  // Process identity survives TUI app-id overrides. Scan on window-list changes;
+  // the helper bounds each descendant walk to known CLI names.
   Timer {
     id: terminalHostDebounce
     interval: 100
-    onTriggered: if (!terminalHostScan.running) terminalHostScan.running = true
+    onTriggered: if (!terminalIdentityScan.running) terminalIdentityScan.running = true
   }
 
   Process {
-    id: terminalHostScan
+    id: terminalIdentityScan
     command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/terminal-hosts.py").toString().replace(/^file:\/\//, ""))]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
-          root.terminalHosts = JSON.parse(text) || ({})
+          var identities = JSON.parse(text) || ({})
+          root.terminalHosts = identities.terminals || ({})
+          root.terminalApps = identities.apps || ({})
           modelTimer.restart()
         } catch (e) {
-          console.warn("[omadock] Failed resolving terminal hosts:", e)
+          console.warn("[omadock] Failed resolving terminal and CLI identities:", e)
         }
       }
     }
@@ -1894,6 +1911,10 @@ Item {
         terminalHostDebounce.restart()
         return
       }
+      if (n === "windowtitlev2") {
+        terminalHostDebounce.restart()
+        modelTimer.restart()
+      }
       if (n === "openwindow") {
         var rawAddr = String(event.data || "").split(",")[0].trim()
         if (rawAddr.slice(0, 2) === "0x" || rawAddr.slice(0, 2) === "0X") rawAddr = rawAddr.slice(2)
@@ -2021,6 +2042,46 @@ Item {
     }
   }
 
+  function refreshNotificationBadges() {
+    var rows = root.showNotificationBadges ? root.notificationPopupRows : []
+    var popups = root.notifService ? root.notifService.popupModel : null
+    if (root.showNotificationBadges && popups) {
+      rows = []
+      for (var i = 0; i < Math.min(popups.count, 512); i++) rows.push(popups.get(i))
+    }
+    root.notificationBadges = DockModel.notificationCounts(
+      root.pinnedSection.concat(root.runningSection), root.appRows, rows)
+  }
+
+  // Overlay plugins may not receive the first-party notification service.
+  // The shell's active-popup files offer a read-only, event-driven fallback.
+  Process {
+    id: notificationPopupWatch
+    running: root.showNotificationBadges && !root.notifService
+    command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/notification-popups.py").toString().replace(/^file:\/\//, ""))]
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) {
+        try {
+          var rows = JSON.parse(line)
+          root.notificationPopupRows = Array.isArray(rows) ? rows : []
+          notificationBadgeTimer.restart()
+        } catch (e) {
+          console.warn("[omadock] Failed reading notification popup snapshot:", e)
+        }
+      }
+    }
+  }
+
+  // Several role changes can describe one replacement notification.
+  Timer {
+    id: notificationBadgeTimer
+    interval: 20
+    onTriggered: root.refreshNotificationBadges()
+  }
+  onNotifServiceChanged: notificationBadgeTimer.restart()
+  onShowNotificationBadgesChanged: notificationBadgeTimer.restart()
+
   function handleNotificationReceived(row) {
     if (!row) return
     var ts = row.timestamp || row.id || 0
@@ -2082,13 +2143,18 @@ Item {
   Connections {
     target: root.notifService ? root.notifService.popupModel : null
     function onRowsInserted(parent, first, last) {
+      notificationBadgeTimer.restart()
       if (!root.showUrgentHint || !root.urgentOnNotification || !root.notifService || !root.notifService.popupModel) return
       for (var i = first; i <= last; i++) {
         var row = root.notifService.popupModel.get(i)
         if (row) root.handleNotificationReceived(row)
       }
     }
+    function onRowsRemoved(parent, first, last) { notificationBadgeTimer.restart() }
+    function onDataChanged(topLeft, bottomRight, roles) { notificationBadgeTimer.restart() }
+    function onModelReset() { notificationBadgeTimer.restart() }
     function onCountChanged() {
+      notificationBadgeTimer.restart()
       if (!root.showUrgentHint || !root.urgentOnNotification || !root.notifService || !root.notifService.popupModel) return
       if (root.notifService.popupModel.count > 0) {
         var row = root.notifService.popupModel.get(0)
@@ -2230,6 +2296,7 @@ Item {
     root.keepPointer = parsed ? parsed.keepPointer !== false : true
     root.showUrgentHint = parsed ? parsed.showUrgentHint !== false : true
     root.urgentOnNotification = parsed ? parsed.urgentOnNotification !== false : true
+    root.showNotificationBadges = parsed ? parsed.showNotificationBadges !== false : true
     root.urgentSound = parsed ? parsed.urgentSound !== false : true
     root.urgentSoundName = parsed && typeof parsed.urgentSoundName === "string" ? parsed.urgentSoundName : "bell"
     root.revealDelay = parsed && typeof parsed.revealDelay === "number"
@@ -3438,7 +3505,12 @@ Item {
     }
     var targetId = (deskEntry && deskEntry.id) ? deskEntry.id : appId
     var targetName = (deskEntry && deskEntry.name) ? deskEntry.name : (target && target.name ? target.name : appId)
-    if (deskEntry && deskEntry.id) {
+    if (deskEntry && deskEntry.id && DockModel.isKnownCli(deskEntry.id) && deskEntry.runInTerminal && deskEntry.command && deskEntry.command.length > 0) {
+      var command = ["omarchy-launch-tui", "--app-id=org.omarchy." + deskEntry.id]
+        .concat(DockModel.toArray(deskEntry.command))
+      Quickshell.execDetached(["bash", "-c", 'cd -- "$1" || exit; shift; exec "$@"',
+        "_", deskEntry.workingDirectory || Quickshell.env("HOME")].concat(command))
+    } else if (deskEntry && deskEntry.id) {
       root.appLibrary.launch(deskEntry.id, targetName)
     } else {
       var webAppMatch = String(appId).match(/^(?:google-chrome|google-chrome-stable|chrome|chromium|brave|edge|microsoft-edge|helium|helium-browser|opera|vivaldi)-(.*?)__?-(?:default|profile.*)$/i)
@@ -3548,6 +3620,7 @@ Item {
     conf.keepPointer = root.keepPointer
     conf.showUrgentHint = root.showUrgentHint
     conf.urgentOnNotification = root.urgentOnNotification
+    conf.showNotificationBadges = root.showNotificationBadges
     conf.urgentSound = root.urgentSound
     conf.urgentSoundName = root.urgentSoundName
     conf.revealDelay = root.revealDelay

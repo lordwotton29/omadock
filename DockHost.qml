@@ -128,6 +128,8 @@ Item {
             hoverEffect: d.hoverEffect,
             activePresetId: d.activePresetId,
             terminalHosts: d.terminalHosts,
+            terminalApps: d.terminalApps,
+            notificationBadges: d.notificationBadges,
             model: d.dockModel
           }
         })

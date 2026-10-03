@@ -24,6 +24,21 @@ Item {
   property bool active: false
   property bool pinned: false
 
+  // Badge counts are filed under whichever id the matching entry carries.
+  // DockModel owns the id spellings, so this only sums the aliases it is told.
+  readonly property int notificationCount: {
+    if (!root || !root.showNotificationBadges || !item.pinned) return 0
+    var ids = DockModel.notificationAliasIds(item.appId)
+    var seen = ({})
+    var count = 0
+    for (var i = 0; i < ids.length; i++) {
+      if (seen[ids[i]]) continue
+      seen[ids[i]] = true
+      count += root.notificationBadges[ids[i]] || 0
+    }
+    return count
+  }
+
   signal activateRequested(string appId)
   signal newWindowRequested(string appId)
   signal menuRequested(string appId, real cx, real cy)
@@ -205,6 +220,31 @@ Item {
       showOriginal: root ? (root.iconHoverOriginal && area.containsMouse) : false
       hovered: area.containsMouse && !item.isDragging
       hoverFx: root ? root.hoverFx : null
+    }
+
+    Rectangle {
+      visible: item.notificationCount > 0
+      anchors.right: iconImg.right
+      anchors.top: iconImg.top
+      anchors.rightMargin: -Style.space(3)
+      anchors.topMargin: -Style.space(3)
+      width: Math.max(Style.space(17), badgeText.implicitWidth + Style.space(8))
+      height: Style.space(17)
+      radius: height / 2
+      color: Color.accent
+      border.width: 1
+      border.color: Color.bar.background
+      z: 2
+      Text {
+        id: badgeText
+        anchors.centerIn: parent
+        text: item.notificationCount > 99 ? "99+" : String(item.notificationCount)
+        textFormat: Text.PlainText
+        color: root && root.isLight(Color.accent) ? "#12100f" : "#f2efec"
+        font.family: Style.font.family
+        font.pixelSize: Style.space(10)
+        font.bold: true
+      }
     }
   }
 
