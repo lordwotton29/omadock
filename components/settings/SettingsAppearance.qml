@@ -362,4 +362,12 @@ Column {
       root.scanRemovableDrives()
     }
   }
+  SwitchRow {
+    key: "warnUnsafeRemoval"
+    label: "Warn on unsafe removal"
+    hint: "Notify when a drive is pulled out while still mounted."
+    visible: root ? root.showRemovableDrives : true
+    checked: root ? root.warnUnsafeRemoval : true
+    onToggled: root.setOption("warnUnsafeRemoval", !root.warnUnsafeRemoval)
+  }
 }

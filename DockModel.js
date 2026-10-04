@@ -1546,6 +1546,7 @@ var SETTINGS_SEARCH = [
   { key: "tooltipDelay", page: "behavior", label: "Tooltip delay", terms: ["tooltip"] },
   { key: "windowPreviews", page: "behavior", label: "Window previews", terms: ["preview", "thumbnail"] },
   { key: "minimizedTiles", page: "behavior", label: "Minimized window tiles", terms: ["park", "tiles", "preview"] },
+  { key: "warnUnsafeRemoval", page: "appearance", label: "Warn on unsafe removal", terms: ["drive", "usb", "eject", "removal", "unsafe", "notify"] },
   { key: "alignment", page: "placement", label: "Alignment", terms: ["left", "center", "right", "position"] },
   { key: "multiMonitor", page: "placement", label: "Show on all monitors", terms: ["monitor", "display", "multi"] },
   { key: "perMonitorApps", page: "placement", label: "Only this monitor's apps", terms: ["monitor", "display"] },
