@@ -82,6 +82,48 @@ Column {
     checked: root ? root.showNotificationBadges : true
     onToggled: root.setOption("showNotificationBadges", !root.showNotificationBadges)
   }
+  ChoiceRow {
+    key: "badgeStyle"
+    label: "Badge style"
+    hint: "A count pill or a plain dot on the icon."
+    options: [
+      { value: "count", label: "Count" },
+      { value: "dot", label: "Dot" }
+    ]
+    value: root ? root.badgeStyle : "count"
+    enabled: root ? root.showNotificationBadges : false
+    opacity: enabled ? 1 : 0.45
+    onPicked: function(v) { root.setOption("badgeStyle", v) }
+  }
+  ChoiceRow {
+    key: "badgePosition"
+    label: "Badge position"
+    hint: "The corner of the icon the badge sits on."
+    options: [
+      { value: "top-right", label: "Top right" },
+      { value: "top-left", label: "Top left" },
+      { value: "bottom-right", label: "Bottom right" },
+      { value: "bottom-left", label: "Bottom left" }
+    ]
+    value: root ? root.badgePosition : "top-right"
+    enabled: root ? root.showNotificationBadges : false
+    opacity: enabled ? 1 : 0.45
+    onPicked: function(v) { root.setOption("badgePosition", v) }
+  }
+  ChoiceRow {
+    key: "badgeColor"
+    label: "Badge color"
+    hint: "Accent, urgent red, or a neutral pill."
+    options: [
+      { value: "accent", label: "Accent" },
+      { value: "urgent", label: "Urgent" },
+      { value: "neutral", label: "Neutral" }
+    ]
+    value: root ? root.badgeColor : "accent"
+    enabled: root ? root.showNotificationBadges : false
+    opacity: enabled ? 1 : 0.45
+    onPicked: function(v) { root.setOption("badgeColor", v) }
+  }
   SwitchRow {
     key: "urgentHint"
     label: "Urgent highlights"

@@ -1175,6 +1175,15 @@ Item {
   property bool showUrgentHint: true
   property bool urgentOnNotification: true
   property bool showNotificationBadges: true
+  // Badge look: what the pill carries, which corner it sits on, its colour.
+  property string badgeStyle: "count"
+  property string badgePosition: "top-right"
+  property string badgeColor: "accent"
+  readonly property color badgeFill: root.badgeColor === "urgent" ? Color.urgent
+    : root.badgeColor === "neutral" ? Color.bar.text
+    : Color.accent
+  readonly property color badgeInk: root.badgeColor === "neutral" ? Color.bar.background
+    : (root.isLight(root.badgeFill) ? "#12100f" : "#f2efec")
   property var notificationBadges: ({})
   property var notificationPopupRows: []
   // Sticky-badge dedupe: row keys already counted, oldest evicted at 512.
@@ -2415,6 +2424,10 @@ Item {
     root.showUrgentHint = parsed ? parsed.showUrgentHint !== false : true
     root.urgentOnNotification = parsed ? parsed.urgentOnNotification !== false : true
     root.showNotificationBadges = parsed ? parsed.showNotificationBadges !== false : true
+    // Bounded spellings: anything else falls back to the classic badge.
+    root.badgeStyle = (parsed && parsed.badgeStyle === "dot") ? "dot" : "count"
+    root.badgePosition = (parsed && ["top-left", "top-right", "bottom-left", "bottom-right"].indexOf(parsed.badgePosition) >= 0) ? parsed.badgePosition : "top-right"
+    root.badgeColor = (parsed && ["accent", "urgent", "neutral"].indexOf(parsed.badgeColor) >= 0) ? parsed.badgeColor : "accent"
     root.urgentSound = parsed ? parsed.urgentSound !== false : true
     root.urgentSoundName = DockModel.cleanSoundName(parsed ? parsed.urgentSoundName : "bell")
     root.revealDelay = parsed && typeof parsed.revealDelay === "number"
@@ -3783,6 +3796,9 @@ Item {
     conf.showUrgentHint = root.showUrgentHint
     conf.urgentOnNotification = root.urgentOnNotification
     conf.showNotificationBadges = root.showNotificationBadges
+    conf.badgeStyle = root.badgeStyle
+    conf.badgePosition = root.badgePosition
+    conf.badgeColor = root.badgeColor
     conf.urgentSound = root.urgentSound
     conf.urgentSoundName = root.urgentSoundName
     conf.revealDelay = root.revealDelay

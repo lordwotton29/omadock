@@ -197,6 +197,7 @@ BorderSurface {
               // groupIconEffects decides whether the dock's icon style reaches
               // the opened group ("theme") or its icons stay original ("none").
               Item {
+                id: cellIcon
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Style.space(36)
                 height: Style.space(36)
@@ -217,29 +218,11 @@ BorderSurface {
                 }
 
                 // Same mark as a dock badge, sitting on the menu surface.
-                Rectangle {
-                  visible: cellItem.notificationCount > 0
-                  anchors.right: parent.right
-                  anchors.top: parent.top
-                  anchors.rightMargin: -Style.space(3)
-                  anchors.topMargin: -Style.space(3)
-                  width: Math.max(Style.space(17), cellBadgeText.implicitWidth + Style.space(8))
-                  height: Style.space(17)
-                  radius: height / 2
-                  color: Color.accent
-                  border.width: 1
-                  border.color: Color.menu.background
-                  z: 2
-                  Text {
-                    id: cellBadgeText
-                    anchors.centerIn: parent
-                    text: cellItem.notificationCount > 99 ? "99+" : String(cellItem.notificationCount)
-                    textFormat: Text.PlainText
-                    color: root && root.isLight(Color.accent) ? "#12100f" : "#f2efec"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.space(10)
-                    font.bold: true
-                  }
+                BadgeMark {
+                  rootRef: root
+                  anchorRef: cellIcon
+                  count: cellItem.notificationCount
+                  rim: Color.menu.background
                 }
               }
 

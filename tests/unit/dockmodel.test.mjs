@@ -115,6 +115,12 @@ test("searchSettings: partial words reach notification badges", () => {
   assert.ok(keys.includes("badges"))
 })
 
+test("searchSettings: badge knobs are reachable by name", () => {
+  assert.equal(M.searchSettings("badge style")[0].key, "badgeStyle")
+  assert.equal(M.searchSettings("badge position")[0].key, "badgePosition")
+  assert.equal(M.searchSettings("badge color")[0].key, "badgeColor")
+})
+
 test("searchSettings: exact label outranks a synonym", () => {
   const hits = M.searchSettings("opacity")
   assert.equal(hits[0].key, "opacity")
