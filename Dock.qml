@@ -759,7 +759,24 @@ Item {
     return h ? root.windowAddress(h) : ""
   }
   onActiveIdChanged: if (root.activeId) root.clearUrgentApp(root.activeId, root.activeWindowAddress)
-  onActiveWindowAddressChanged: if (root.activeWindowAddress) root.clearUrgentApp(root.activeId, root.activeWindowAddress)
+  onActiveWindowAddressChanged: {
+    if (root.activeWindowAddress) root.clearUrgentApp(root.activeId, root.activeWindowAddress)
+    root.rememberFocus(root.activeWindowAddress)
+  }
+
+  // Window addresses by recency of focus, newest first. Parking hands focus to
+  // the newest entry still standing, so a park can never leave the keyboard
+  // inside the parking lot. Bounded; addresses vanish when their windows do.
+  property var focusOrder: []
+
+  function rememberFocus(addr) {
+    if (!addr) return
+    var out = [addr]
+    for (var i = 0; i < root.focusOrder.length && out.length < 12; i++) {
+      if (root.focusOrder[i] !== addr) out.push(root.focusOrder[i])
+    }
+    root.focusOrder = out
+  }
 
   readonly property int focusedWorkspaceId: Hyprland.focusedWorkspace
     ? Hyprland.focusedWorkspace.id
@@ -3078,10 +3095,14 @@ Item {
     })
   }
 
-  function minimizeToplevel(topOrAddr) {
+  // focusNext names the app window that should take focus once this one is
+  // parked — the click contract's "step to the app's next window". appId
+  // carries the urgent-clear context for focusing it.
+  function minimizeToplevel(topOrAddr, focusNext, appId) {
     var address = typeof topOrAddr === "string" ? topOrAddr : root.windowAddress(root.hyprToplevelFor(topOrAddr))
     if (!address) return false
 
+    var wasFocused = root.activeWindowAddress === address
     var handle = root.liveHyprToplevelForAddress(address)
     var origin = (handle && handle.workspace) ? root.workspaceTarget(handle.workspace) : root.workspaceTarget(Hyprland.focusedWorkspace)
     if (!origin || origin === root.minimizedWorkspace) origin = root.workspaceTarget(Hyprland.focusedWorkspace)
@@ -3100,7 +3121,55 @@ Item {
       'hl.dsp.window.move({ window = "address:' + address + '", workspace = "'
         + root.luaString(root.minimizedWorkspace) + '", follow = false })',
       "movetoworkspacesilent " + root.minimizedWorkspace + ",address:" + address)
+    if (wasFocused) root.handoffFocusAfterPark(address, origin, focusNext || null, appId || "")
     return true
+  }
+
+  // A window of wsTarget other than exceptAddress, as the compositor sees it.
+  function workspaceHasLiveWindow(wsTarget, exceptAddress) {
+    if (!wsTarget) return false
+    var list = Hyprland.toplevels ? Hyprland.toplevels.values : []
+    for (var i = 0; i < list.length; i++) {
+      var a = root.windowAddress(list[i])
+      if (!a || a === exceptAddress) continue
+      if (root.liveWsNameOf(list[i]) === wsTarget) return true
+    }
+    return false
+  }
+
+  // The window to take focus when a park emptied its workspace: the most
+  // recently focused window still standing, else any standing window. A parked
+  // window still accepts typing, so the keyboard must never stay on one.
+  function standingWindowAfterPark(exceptAddress) {
+    var i, a
+    for (i = 0; i < root.focusOrder.length; i++) {
+      a = root.focusOrder[i]
+      if (!a || a === exceptAddress) continue
+      var h = root.liveHyprToplevelForAddress(a)
+      if (h && !root.isWinParkedLive(h)) return h
+    }
+    var list = Hyprland.toplevels ? Hyprland.toplevels.values : []
+    for (i = 0; i < list.length; i++) {
+      a = root.windowAddress(list[i])
+      if (!a || a === exceptAddress) continue
+      if (!root.isWinParkedLive(list[i])) return list[i]
+    }
+    return null
+  }
+
+  // Parking must never leave the keyboard inside the parking lot. The click
+  // contract says parking one of several windows "hands focus straight to a
+  // sibling". With no sibling, the compositor hands focus to another window of
+  // the workspace on its own; only an emptied workspace needs help, and it
+  // goes to the window used before this one rather than any particular app.
+  function handoffFocusAfterPark(address, origin, focusNext, appId) {
+    if (focusNext && focusNext.address && focusNext.address !== address) {
+      root.focusWindowByAddress(focusNext.address, appId)
+      return
+    }
+    if (root.workspaceHasLiveWindow(origin, address)) return
+    var prev = root.standingWindowAfterPark(address)
+    if (prev) root.focusWindowByAddress(root.windowAddress(prev), "")
   }
 
   function restoreWindow(targetRef, appId, useOrigin) {
@@ -3400,7 +3469,9 @@ Item {
       }
     }
 
-    return (target && target.address) ? root.minimizeToplevel(target.address) : false
+    return (target && target.address)
+      ? root.minimizeToplevel(target.address, root.stepWindow(root.visibleWindows(windows), 1), entry ? entry.appId : "")
+      : false
   }
 
   function minimizeApp(entry) {
@@ -4102,7 +4173,7 @@ Item {
       }
       if (root.minimizeMode === "active") {
         if (visible[focusedIdx] && visible[focusedIdx].address) {
-          root.minimizeToplevel(visible[focusedIdx].address)
+          root.minimizeToplevel(visible[focusedIdx].address, root.stepWindow(visible, 1), appId)
         } else {
           root.minimizeOneWindow(entry)
         }
