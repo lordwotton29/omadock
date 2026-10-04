@@ -329,10 +329,33 @@ function findNotificationTargets(allEntries, appRows, row) {
   return standardMatches
 }
 
+// Popups in rows that were not in the previous snapshot, told apart by
+// their timestamp (rows without one cannot be told apart and are skipped).
+// Feeds urgency from the popup-file watch when the shell's notification
+// service is not available to the dock.
+function newPopupRows(previous, rows) {
+  var seen = {}
+  var prev = Array.isArray(previous) ? previous : []
+  for (var i = 0; i < prev.length; i++) {
+    var t = prev[i] ? prev[i].timestamp : 0
+    if (typeof t === "number" && t > 0) seen[t] = true
+  }
+  var out = []
+  var list = Array.isArray(rows) ? rows : []
+  for (var j = 0; j < list.length; j++) {
+    var r = list[j]
+    var ts = r ? r.timestamp : 0
+    if (typeof ts === "number" && ts > 0 && !seen[ts]) out.push(r)
+  }
+  return out
+}
+
 // Badge attribution: which dock entries each row counts against. Grouped and
 // unpinned entries count too — whether a count is shown (pinned only, or at
 // all) is the UI's decision. The 512-row bound keeps a hostile snapshot from
-// amplifying attribution work.
+// amplifying attribution work. A fresh count of active popups, not unread
+// messages or notification history: rebuilding from the model handles
+// replacements and removals without drift.
 function notificationCounts(entries, appRows, rows) {
   var counts = {}
   if (!Array.isArray(rows)) return counts
