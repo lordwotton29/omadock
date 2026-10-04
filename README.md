@@ -593,6 +593,11 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 
 Full release notes, historical changelogs, and upgrade guides across all versions are available on [**GitHub Releases**](https://github.com/thepathless/omadock/releases).
 
+### v4.0.3 — 2026-10-04
+
+- **Settings pages see the dock again** (thanks [@priard](https://github.com/priard), #40) — the settings pages were wired with `root: root`, which in QML binds to the page's own `root` property and stays null; they now receive the dock through the panel (`panel.root`), and a tree-wide test guards against this self-binding class of bug returning.
+- **Group tiles keep their 2×2 grid** (thanks [@priard](https://github.com/priard), #41) — with one or two members the mini-icons grid keeps its full 2×2 shape (members sit in the top row where a third would join) instead of collapsing into a single centred row.
+
 ### v4.0.2 — 2026-10-04
 
 - **Badges survive shell restarts** — notification counts and their dedupe keys round-trip through `~/.local/state/omarchy/omadock-badges.json` (bounded on both write and read), keeping the documented promise that counts stay until the app is focused even across an Omarchy shell restart; clearing on focus persists too.
