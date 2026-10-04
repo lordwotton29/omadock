@@ -37,6 +37,10 @@ Item {
   readonly property string dockPath: Quickshell.env("HOME") + "/.config/omarchy/dock.json"
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/omadock.json"
   property bool _savingConfig: false
+  // Sticky badge counts and their dedupe keys, persisted so a shell restart
+  // resumes the same badges (README: counts stay until the app is focused).
+  readonly property string badgePath: Quickshell.env("HOME") + "/.local/state/omarchy/omadock-badges.json"
+  property bool _savingBadges: false
 
   property string screenName: ""
   // Real, connected outputs only: Qt keeps placeholder screens (empty name)
@@ -1923,6 +1927,24 @@ Item {
     onFileChanged: dndConfigFile.reload()
   }
 
+  // Own written state, loaded once at startup; nothing external edits it, so
+  // it is not watched (our own writes cannot echo back as reloads).
+  CappedFileView {
+    id: badgeFile
+    path: root.badgePath
+    maxBytes: DockModel.MAX_BADGE_BYTES
+    watchChanges: false
+    onLoaded: root.loadBadgeState()
+  }
+
+  // Bumps and clears can arrive in bursts; one save settles them.
+  Timer {
+    id: badgeSaveDebounce
+    interval: 400
+    repeat: false
+    onTriggered: root.flushBadgeState()
+  }
+
   readonly property bool isDndActive: {
     if (root.notifService && typeof root.notifService.doNotDisturb === "boolean") {
       return root.notifService.doNotDisturb
@@ -2150,6 +2172,26 @@ Item {
     }
   }
 
+  // Restores the sticky badge session after a shell restart: counts and the
+  // rows already counted, bounded and sanitized on the way in.
+  function loadBadgeState() {
+    if (root._savingBadges) return
+    var st = DockModel.parseBadgeState(DockModel.readCapped(badgeFile.text, DockModel.MAX_BADGE_BYTES))
+    root.notificationBadges = st.counts
+    root._notifSeenKeys = st.seenKeys
+    root._notifSeenOrder = st.seenOrder
+  }
+
+  function scheduleBadgeSave() {
+    badgeSaveDebounce.restart()
+  }
+
+  function flushBadgeState() {
+    root._savingBadges = true
+    badgeFile.setText(DockModel.serializeBadgeState(root.notificationBadges, root._notifSeenOrder))
+    Qt.callLater(function() { root._savingBadges = false })
+  }
+
   // Sticky badges: a count arrives with its notification and stays until its
   // app is focused (clearNotificationBadgesFor). Rows are deduped by
   // DockModel.notificationRowKey, so model churn and re-emitted snapshots
@@ -2171,6 +2213,9 @@ Item {
       if (id && !(root.activeId && DockModel.isAppMatch(id, root.activeId))) ids.push(id)
     }
     if (ids.length) root.notificationBadges = DockModel.bumpNotificationCounts(root.notificationBadges, ids, 1)
+    // The seen key counts as a state change too: a row skipped now must stay
+    // counted-out after a restart.
+    root.scheduleBadgeSave()
   }
 
   function refreshNotificationBadges() {
@@ -2180,6 +2225,7 @@ Item {
         root._notifSeenOrder = []
       }
       if (JSON.stringify(root.notificationBadges) !== "{}") root.notificationBadges = {}
+      root.scheduleBadgeSave()
       return
     }
     // The watcher's snapshot rows hold every live popup, so nothing is lost
@@ -3575,7 +3621,10 @@ Item {
         }
       }
     }
-    if (JSON.stringify(next) !== JSON.stringify(root.notificationBadges)) root.notificationBadges = next
+    if (JSON.stringify(next) !== JSON.stringify(root.notificationBadges)) {
+      root.notificationBadges = next
+      root.scheduleBadgeSave()
+    }
   }
 
   // Clears urgency entries from urgentMap for an application and its windows.
@@ -4275,7 +4324,7 @@ Item {
   function notifyUnsafeRemoval(name) {
     var label = String(name || "A drive").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     Quickshell.execDetached([
-      "notify-send", "-a", "OmaDock", "-i", "drive-removable-media", "--",
+      "bash", root.scriptPath("notify.sh"), "drive-removable-media",
       "Drive removed without ejecting",
       label + " was removed while still mounted. Recent changes may not have been written; eject it from the dock next time."
     ])
@@ -4311,7 +4360,7 @@ Item {
   function notifyAppMissing(name, detail) {
     var label = String(name || "This app").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     Quickshell.execDetached([
-      "notify-send", "-a", "OmaDock", "-i", "dialog-error",
+      "bash", root.scriptPath("notify.sh"), "dialog-error",
       "App no longer installed",
       label + " is no longer installed. " + String(detail || "Reinstall the app or unpin it from the dock.")
     ])
