@@ -595,6 +595,7 @@ Full release notes, historical changelogs, and upgrade guides across all version
 
 ### v4.0.1 — 2026-10-04
 
+- **Classic indicator look restored** — running marks draw at their original dimensions again (5px dots, 4px micro-dots past five windows, 12×4 bars, 1.5px minimized rings). A contributor's fractional-scale fix had quietly thinned every mark by a pixel; that look change is reverted while the pixel-grid snapping it introduced stays.
 - **App groups behave like pinned apps** — a group tile's indicator is the same row apps carry (one mark per member window, hollow dots for minimized, `+N` overflow), its accent bar follows the focused member's window, and the group's tooltip shows the member windows as live preview cards with the focused one in front.
 - **Notification badge customization** — `badgeStyle` (count pill or dot), `badgePosition` (any corner) and `badgeColor` (accent, urgent, neutral), with settings rows and fuzzy-search entries. The badge now rides the icon through hover effects.
 - **Contributor integrations** (thanks [@priard](https://github.com/priard)) — urgency on notifications without the shell service (#27), the badge following hover effects (#28), CI security grep and shader-source sync (#29), honest folder-stack truncation and failure labels (#30), warnings for drives pulled while mounted (#31), DockModel behaviour and gate tests (#32), live tooling and a dock benchmark (#33), and a preset-menu flicker fix (#36).
