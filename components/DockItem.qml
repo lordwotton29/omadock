@@ -263,13 +263,16 @@ Item {
       showOriginal: root ? (root.iconHoverOriginal && area.containsMouse) : false
       hovered: area.containsMouse && !item.isDragging
       hoverFx: root ? root.hoverFx : null
-    }
 
-    BadgeMark {
-      rootRef: item.rootRef
-      anchorRef: iconImg
-      count: item.notificationCount
-      rim: Color.bar.background
+      // The badge rides on the icon, so hover effects move it too.
+      overlay: [
+        BadgeMark {
+          rootRef: item.rootRef
+          anchorRef: parent
+          count: item.notificationCount
+          rim: Color.bar.background
+        }
+      ]
     }
   }
 
