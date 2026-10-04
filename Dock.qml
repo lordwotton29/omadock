@@ -64,15 +64,69 @@ Item {
 
   readonly property var dockScreen: root.pickScreen()
 
-  // The output's own scale (Hyprland's monitor scale, e.g. 1.5). Qt renders
-  // fractional scales at the next whole ratio (2) and the compositor scales
-  // the buffer down, so pixel-exact drawing has to target this grid, not
-  // Screen.devicePixelRatio. HyprlandMonitor.scale reads 0 until the monitor
-  // list has been fetched, hence the refresh (Component.onCompleted) and the
-  // fallback.
-  readonly property real outputScale: {
+  // The output's own scale (Hyprland's monitor scale, e.g. 1.5): the pixel
+  // grid that pixel-exact drawing snaps to. Screen.devicePixelRatio reports
+  // the rounded ratio (2 at 1.5), not the grid the window raster lands on,
+  // so it cannot stand in for this number. HyprlandMonitor.scale reads 0
+  // until the monitor list has been fetched, hence the refresh
+  // (Component.onCompleted) and the fallback.
+  //
+  // HyprlandMonitor.scale also updates in place without notifying, Hyprland
+  // emits no event when a monitor's scale changes, and Qt's rounded
+  // Screen.devicePixelRatio carries no change signal at all — so the lookup
+  // is driven from the things that do fire: the screen object quickshell
+  // re-advertises on any output change (dockScreen) and Hyprland's monitor
+  // events. The refresh's IPC reply lands asynchronously and silently, so
+  // recheckOutputScale re-runs the lookup in a short burst until it has had
+  // time to land.
+  property int monitorRev: 0
+  readonly property real outputScale: root.lookupOutputScale(root.monitorRev)
+  onDockScreenChanged: root.recheckOutputScale()
+
+  function lookupOutputScale(_rev) {
+    // HyprlandMonitor.scale stops tracking after load, but the monitor's
+    // physical size and Qt's logical screen size stay live — their ratio is
+    // the output scale. Diagonal over diagonal, since width alone breaks on a
+    // rotated output. m.scale is only a last resort. _rev is the binding's
+    // re-run hook (monitorRev), not an input.
     var m = root.dockScreen ? Hyprland.monitorFor(root.dockScreen) : null
+    var lw = Screen.width
+    var lh = Screen.height
+    if (m && m.width > 0 && m.height > 0 && lw > 0 && lh > 0) {
+      return Math.sqrt((m.width * m.width + m.height * m.height) / (lw * lw + lh * lh))
+    }
     return (m && m.scale > 0) ? m.scale : 1
+  }
+
+  function recheckOutputScale() {
+    Hyprland.refreshMonitors()
+    scaleRevBump.ticks = 0
+    scaleRevBump.restart()
+  }
+
+  // Bounded burst, not a poll: stops on its own after two seconds.
+  Timer {
+    id: scaleRevBump
+    interval: 250
+    repeat: true
+    property int ticks: 0
+    onTriggered: {
+      root.monitorRev++
+      ticks++
+      if (ticks >= 8) {
+        stop()
+        ticks = 0
+      }
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event.name === "configreloaded" || event.name.startsWith("monitor")) {
+        root.recheckOutputScale()
+      }
+    }
   }
 
   // ------------------------------------------------- multi-monitor
@@ -344,7 +398,7 @@ Item {
     root.loadConfig()
     if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
     // Fills HyprlandMonitor.scale for outputScale.
-    Hyprland.refreshMonitors()
+    root.recheckOutputScale()
   }
 
   // ------------------------------------------------- magnification
@@ -637,6 +691,9 @@ Item {
   }
   readonly property var runningSection: root.dockModel.running || []
   readonly property var groupedSection: root.dockModel.grouped || []
+  // Every entry a notification may be attributed to: pinned, unpinned
+  // running, and foldered (grouped) apps alike.
+  readonly property var notifEntries: root.pinnedSection.concat(root.runningSection).concat(root.groupedSection || [])
 
   function refreshDock() {
     var tops = ToplevelManager.toplevels ? ToplevelManager.toplevels.values : []
@@ -796,12 +853,18 @@ Item {
   readonly property string activeStackView: root.activeStackFolder !== "" ? root.folderViewFor(root.activeStackFolder) : "stack"
   property var activeStackEntries: []
   property int activeStackTotalCount: 0
+  // The last scan stopped at its entry budget (the folder holds more), or
+  // could not read the folder at all (timeout, unreadable).
+  property bool activeStackTruncated: false
+  property bool activeStackFailed: false
   property real activeStackX: 0
   property string contextFolderPath: ""
   property string contextFolderName: ""
 
   // ------------------------------------------------- removable drives state
   property bool showRemovableDrives: true
+  // Warn when a drive is pulled out while still mounted.
+  property bool warnUnsafeRemoval: true
   property var mountedDrives: []
   property string contextDriveDev: ""
   property string contextDriveMount: ""
@@ -1118,8 +1181,20 @@ Item {
   property bool showUrgentHint: true
   property bool urgentOnNotification: true
   property bool showNotificationBadges: true
+  // Badge look: what the pill carries, which corner it sits on, its colour.
+  property string badgeStyle: "count"
+  property string badgePosition: "top-right"
+  property string badgeColor: "accent"
+  readonly property color badgeFill: root.badgeColor === "urgent" ? Color.urgent
+    : root.badgeColor === "neutral" ? Color.bar.text
+    : Color.accent
+  readonly property color badgeInk: root.badgeColor === "neutral" ? Color.bar.background
+    : (root.isLight(root.badgeFill) ? "#12100f" : "#f2efec")
   property var notificationBadges: ({})
   property var notificationPopupRows: []
+  // Sticky-badge dedupe: row keys already counted, oldest evicted at 512.
+  property var _notifSeenKeys: ({})
+  property var _notifSeenOrder: []
   property bool urgentSound: true
   property string urgentSoundName: "bell"
   property var notifService: null
@@ -1312,10 +1387,11 @@ Item {
           // header, or repopulating after the stack was closed.
           var wanted = String(root.pendingStackPath || "")
           if (parsed.folder !== wanted) return
-          root.applyStackScan(parsed.items || [], parsed.count || 0)
+          root.applyStackScan(parsed.items || [], parsed.count || 0, parsed.truncated === true, false)
         } catch (e) {
           console.warn("[omadock] Failed parsing folder scan:", e)
-          root.applyStackScan([], 0)
+          // Empty output: the helper timed out or died (a stalled mount).
+          root.applyStackScan([], 0, false, true)
         }
       }
     }
@@ -2057,30 +2133,72 @@ Item {
     }
   }
 
+  // Sticky badges: a count arrives with its notification and stays until its
+  // app is focused (clearNotificationBadgesFor). Rows are deduped by
+  // DockModel.notificationRowKey, so model churn and re-emitted snapshots
+  // never double-count; the seen-key store is bounded to the same 512 as the
+  // row walks. The 20ms timer debounces the several signals that ask for a
+  // rebuild.
+  function processNotifRowSticky(row) {
+    if (!row || !root.showNotificationBadges) return
+    var key = DockModel.notificationRowKey(row)
+    if (!key || root._notifSeenKeys[key]) return
+    root._notifSeenKeys[key] = true
+    root._notifSeenOrder.push(key)
+    while (root._notifSeenOrder.length > 512) delete root._notifSeenKeys[root._notifSeenOrder.shift()]
+
+    var rowCounts = DockModel.notificationCounts(root.notifEntries, root.appRows, [row])
+    var ids = []
+    for (var id in rowCounts) {
+      // A focused app shows no badge; its counts clear at the focus event.
+      if (id && !(root.activeId && DockModel.isAppMatch(id, root.activeId))) ids.push(id)
+    }
+    if (ids.length) root.notificationBadges = DockModel.bumpNotificationCounts(root.notificationBadges, ids, 1)
+  }
+
   function refreshNotificationBadges() {
-    var rows = root.showNotificationBadges ? root.notificationPopupRows : []
+    if (!root.showNotificationBadges) {
+      if (root._notifSeenOrder.length) {
+        root._notifSeenKeys = {}
+        root._notifSeenOrder = []
+      }
+      if (JSON.stringify(root.notificationBadges) !== "{}") root.notificationBadges = {}
+      return
+    }
+    // The watcher's snapshot rows hold every live popup, so nothing is lost
+    // to a dismissal between two emissions.
+    var rows = root.notificationPopupRows
     var popups = root.notifService ? root.notifService.popupModel : null
-    if (root.showNotificationBadges && popups) {
+    if (popups) {
       rows = []
       for (var i = 0; i < Math.min(popups.count, 512); i++) rows.push(popups.get(i))
     }
-    root.notificationBadges = DockModel.notificationCounts(
-      root.pinnedSection.concat(root.runningSection), root.appRows, rows)
+    for (var r = 0; r < Math.min(rows.length, 512); r++) root.processNotifRowSticky(rows[r])
   }
 
   // Overlay plugins may not receive the first-party notification service.
-  // The shell's active-popup files offer a read-only, event-driven fallback.
+  // The shell's active-popup files offer a read-only, event-driven fallback,
+  // for the badges and for urgency on a new notification.
+  property bool _popupWatchPrimed: false
   Process {
     id: notificationPopupWatch
-    running: root.showNotificationBadges && !root.notifService
+    running: (root.showNotificationBadges || (root.showUrgentHint && root.urgentOnNotification)) && !root.notifService
+    // The first snapshot after (re)start only records what is already up,
+    // so a shell restart does not bounce apps for old popups.
+    onRunningChanged: if (!running) root._popupWatchPrimed = false
     command: ["python3", decodeURIComponent(Qt.resolvedUrl("scripts/notification-popups.py").toString().replace(/^file:\/\//, ""))]
     stdout: SplitParser {
       splitMarker: "\n"
       onRead: function(line) {
         try {
           var rows = JSON.parse(line)
-          root.notificationPopupRows = Array.isArray(rows) ? rows : []
+          var next = Array.isArray(rows) ? rows : []
+          var fresh = root._popupWatchPrimed ? DockModel.newPopupRows(root.notificationPopupRows, next) : []
+          root._popupWatchPrimed = true
+          root.notificationPopupRows = next
           notificationBadgeTimer.restart()
+          if (root.showUrgentHint && root.urgentOnNotification)
+            for (var i = 0; i < fresh.length; i++) root.handleNotificationReceived(fresh[i])
         } catch (e) {
           console.warn("[omadock] Failed reading notification popup snapshot:", e)
         }
@@ -2103,7 +2221,7 @@ Item {
     if (ts && ts === root._lastProcessedNotifTimestamp) return
     root._lastProcessedNotifTimestamp = ts
 
-    var allEntries = root.pinnedSection.concat(root.runningSection)
+    var allEntries = root.notifEntries
     var matchedEntries = DockModel.findNotificationTargets(allEntries, root.appRows, row)
     if (!matchedEntries || matchedEntries.length === 0) return
 
@@ -2163,10 +2281,14 @@ Item {
     target: root.notifService ? root.notifService.popupModel : null
     function onRowsInserted(parent, first, last) {
       notificationBadgeTimer.restart()
-      if (!root.showUrgentHint || !root.urgentOnNotification || !root.notifService || !root.notifService.popupModel) return
+      var wantUrgent = root.showUrgentHint && root.urgentOnNotification
       for (var i = first; i <= last; i++) {
         var row = root.notifService.popupModel.get(i)
-        if (row) root.handleNotificationReceived(row)
+        if (!row) continue
+        // Counted here, not on the timer: a popup that expires before the
+        // debounce still leaves its sticky badge.
+        root.processNotifRowSticky(row)
+        if (wantUrgent) root.handleNotificationReceived(row)
       }
     }
     function onRowsRemoved(parent, first, last) { notificationBadgeTimer.restart() }
@@ -2177,7 +2299,10 @@ Item {
       if (!root.showUrgentHint || !root.urgentOnNotification || !root.notifService || !root.notifService.popupModel) return
       if (root.notifService.popupModel.count > 0) {
         var row = root.notifService.popupModel.get(0)
-        if (row) root.handleNotificationReceived(row)
+        if (row) {
+          root.processNotifRowSticky(row)
+          root.handleNotificationReceived(row)
+        }
       }
     }
   }
@@ -2284,6 +2409,7 @@ Item {
     root.alignment = (parsed && (parsed.alignment || parsed.position)) ? String(parsed.alignment || parsed.position).toLowerCase() : "center"
     if (root.alignment !== "left" && root.alignment !== "right") root.alignment = "center"
     root.showRemovableDrives = parsed ? parsed.showRemovableDrives !== false : true
+    root.warnUnsafeRemoval = parsed ? parsed.warnUnsafeRemoval !== false : true
     if (parsed && DockModel.isList(parsed.appGroups)) {
       // Persisted collections are shape- and size-bounded before reaching the
       // long-lived shell (see DockModel boundAppGroups / boundPinnedFolders).
@@ -2316,6 +2442,10 @@ Item {
     root.showUrgentHint = parsed ? parsed.showUrgentHint !== false : true
     root.urgentOnNotification = parsed ? parsed.urgentOnNotification !== false : true
     root.showNotificationBadges = parsed ? parsed.showNotificationBadges !== false : true
+    // Bounded spellings: anything else falls back to the classic badge.
+    root.badgeStyle = (parsed && parsed.badgeStyle === "dot") ? "dot" : "count"
+    root.badgePosition = (parsed && ["top-left", "top-right", "bottom-left", "bottom-right"].indexOf(parsed.badgePosition) >= 0) ? parsed.badgePosition : "top-right"
+    root.badgeColor = (parsed && ["accent", "urgent", "neutral"].indexOf(parsed.badgeColor) >= 0) ? parsed.badgeColor : "accent"
     root.urgentSound = parsed ? parsed.urgentSound !== false : true
     root.urgentSoundName = DockModel.cleanSoundName(parsed ? parsed.urgentSoundName : "bell")
     root.revealDelay = parsed && typeof parsed.revealDelay === "number"
@@ -3315,7 +3445,7 @@ Item {
 
     var next = {}
     var dropped = false
-    var allEntries = root.pinnedSection.concat(root.runningSection).concat(root.groupedSection || [])
+    var allEntries = root.notifEntries
 
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i]
@@ -3354,9 +3484,33 @@ Item {
     return dropped ? next : map
   }
 
+  // Sticky badges are "notifications you have not looked at": they clear for
+  // the app (and whatever entry owns the address) as soon as it gains focus,
+  // independently of whether any urgency entry exists.
+  function clearNotificationBadgesFor(appId, address) {
+    if (!root.notificationBadges) return
+    var next = DockModel.clearNotificationCounts(root.notificationBadges, appId)
+    var normAddr = address ? DockModel.windowAddress({ address: address }) : ""
+    if (normAddr) {
+      var allEntries = root.notifEntries
+      for (var i = 0; i < allEntries.length; i++) {
+        var entry = allEntries[i]
+        var wins = entry ? (entry.windowList || []) : []
+        for (var w = 0; w < wins.length; w++) {
+          if (wins[w] && wins[w].address === normAddr) {
+            next = DockModel.clearNotificationCounts(next, entry.appId || entry.id)
+            break
+          }
+        }
+      }
+    }
+    if (JSON.stringify(next) !== JSON.stringify(root.notificationBadges)) root.notificationBadges = next
+  }
+
   // Clears urgency entries from urgentMap for an application and its windows.
   // Called whenever an app/window receives focus or is activated/clicked by user.
   function clearUrgentApp(appId, address) {
+    root.clearNotificationBadgesFor(appId, address)
     if (!root.urgentMap) return
     var hasKeys = false
     for (var k in root.urgentMap) {
@@ -3379,7 +3533,7 @@ Item {
       changed = true
     }
 
-    var allEntries = root.pinnedSection.concat(root.runningSection).concat(root.groupedSection || [])
+    var allEntries = root.notifEntries
     var targetEntries = []
 
     for (var i = 0; i < allEntries.length; i++) {
@@ -3600,6 +3754,7 @@ Item {
     conf.alignment = root.alignment || "center"
     delete conf.position
     conf.showRemovableDrives = root.showRemovableDrives
+    conf.warnUnsafeRemoval = root.warnUnsafeRemoval
     conf.appGroups = DockModel.boundAppGroups(root.appGroups)
     conf.autohide = root.autohide
     conf.intelligentAutohide = root.intelligentAutohide
@@ -3660,6 +3815,9 @@ Item {
     conf.showUrgentHint = root.showUrgentHint
     conf.urgentOnNotification = root.urgentOnNotification
     conf.showNotificationBadges = root.showNotificationBadges
+    conf.badgeStyle = root.badgeStyle
+    conf.badgePosition = root.badgePosition
+    conf.badgeColor = root.badgeColor
     conf.urgentSound = root.urgentSound
     conf.urgentSoundName = root.urgentSoundName
     conf.revealDelay = root.revealDelay
@@ -3720,6 +3878,47 @@ Item {
     return ""
   }
 
+  // Read-only snapshot of the dock items' rectangles in window coordinates,
+  // for the benchmark and live tests (IPC itemGeometry). Changes nothing.
+  function itemGeometry() {
+    var out = []
+    function add(it, kind, id, windows, urgent) {
+      if (!it || !it.visible || it.width <= 0 || it.height <= 0) return
+      var p = it.mapToItem(null, 0, 0)
+      out.push({ id: String(id || ""), kind: kind,
+                 x: Math.round(p.x), y: Math.round(p.y),
+                 w: Math.round(it.width), h: Math.round(it.height),
+                 windows: windows || 0, urgent: urgent === true,
+                 animating: it.urgentFresh === true || it.pulsing === true })
+    }
+    var card = root.dockCardComp
+    // A hidden dock only slides off screen, so its items still look visible.
+    if (!card || !root.dockVisible) return "[]"
+    var i, it
+    for (i = 0; i < card.pinnedRowRepeater.count; i++) {
+      var slot = card.pinnedRowRepeater.itemAt(i)
+      it = slot ? slot.item : null
+      if (!it) continue
+      if (it.groupData !== undefined) add(it, "group", (it.groupData || {}).id, 0, false)
+      else if (it.appId !== undefined) add(it, "app", it.appId, it.windows, it.urgent)
+    }
+    for (i = 0; i < card.runningRepeater.count; i++) {
+      it = card.runningRepeater.itemAt(i)
+      if (it) add(it, "app", it.appId, it.windows, it.urgent)
+    }
+    for (i = 0; i < card.minimizedTilesRepeater.count; i++)
+      add(card.minimizedTilesRepeater.itemAt(i), "tile", "", 1, false)
+    for (i = 0; i < card.foldersRepeater.count; i++) {
+      it = card.foldersRepeater.itemAt(i)
+      if (it) add(it, "folder", it.folderPath, 0, false)
+    }
+    for (i = 0; i < card.drivesRepeater.count; i++) {
+      it = card.drivesRepeater.itemAt(i)
+      if (it) add(it, "drive", it.mountpoint, 0, false)
+    }
+    return JSON.stringify(out)
+  }
+
   function presetNameTaken(name, exceptId) {
     var id = root.presetIdByName(name)
     return id !== "" && id !== exceptId
@@ -3777,6 +3976,22 @@ Item {
     root.presets = next
     root.saveConfig()
     return true
+  }
+
+  // The context menu is a layer popup that Hyprland fades out over ~200 ms.
+  // Restyling the dock under it (a border changes the card height and the
+  // popup's anchor) makes the fading menu jump over the new look, so a pick
+  // from the menu waits until the fade is over.
+  Timer {
+    id: menuPresetTimer
+    property string presetId: ""
+    interval: 250
+    onTriggered: root.applyPreset(presetId)
+  }
+
+  function applyPresetAfterMenu(id) {
+    menuPresetTimer.presetId = id
+    menuPresetTimer.restart()
   }
 
   // Keys a preset lacks (saved before they existed) keep their current value.
@@ -3983,6 +4198,45 @@ Item {
   // Shared feedback for the "app is gone" classes (launching a stale pin,
   // pinning an unresolvable id) that used to fail silently. The label is
   // markup-escaped: notification bodies are rendered as markup.
+  // A drive pulled out while mounted (scripts/drive-removal-watch.py).
+  // The label comes from list-drives.py, already cleaned; it is escaped
+  // again because notification bodies render markup.
+  function notifyUnsafeRemoval(name) {
+    var label = String(name || "A drive").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    Quickshell.execDetached([
+      "notify-send", "-a", "OmaDock", "-i", "drive-removable-media", "--",
+      "Drive removed without ejecting",
+      label + " was removed while still mounted. Recent changes may not have been written; eject it from the dock next time."
+    ])
+  }
+
+  // Event driven: the script blocks on kernel uevents and mount-table
+  // changes, so it adds no idle CPU. One dock (the primary) reports.
+  Process {
+    id: driveRemovalWatch
+    command: ["python3", root.scriptPath("drive-removal-watch.py")]
+    running: root.isPrimary && root.showRemovableDrives && root.warnUnsafeRemoval
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) {
+        try {
+          var ev = JSON.parse(line)
+          var drives = root.mountedDrives || []
+          var name = ""
+          for (var i = 0; i < drives.length; i++) {
+            if (drives[i] && (drives[i].dev === ev.dev || drives[i].mountpoint === ev.mountpoint)) {
+              name = drives[i].name
+              break
+            }
+          }
+          root.notifyUnsafeRemoval(name || String(ev.mountpoint || "").split("/").pop())
+        } catch (e) {
+          console.warn("[omadock] Failed reading drive removal event:", e)
+        }
+      }
+    }
+  }
+
   function notifyAppMissing(name, detail) {
     var label = String(name || "This app").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     Quickshell.execDetached([
@@ -4140,11 +4394,13 @@ Item {
   // running = true while a process is already running is a no-op in
   // Quickshell, which used to let a slow older scan race the new one.
   // The scan for the pending folder landed: show it in one step.
-  function applyStackScan(items, count) {
+  function applyStackScan(items, count, truncated, failed) {
     if (root.pendingStackPath === "") return
     root.activeStackPath = root.pendingStackPath
     root.activeStackName = root.pendingStackName
     root.activeStackX = root.pendingStackX
+    root.activeStackTruncated = truncated === true
+    root.activeStackFailed = failed === true
     root.activeStackTotalCount = count
     root.activeStackEntries = items
     root.activeStackLoading = false
