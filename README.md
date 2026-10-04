@@ -593,6 +593,12 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 
 Full release notes, historical changelogs, and upgrade guides across all versions are available on [**GitHub Releases**](https://github.com/thepathless/omadock/releases).
 
+### v4.0.2 — 2026-10-04
+
+- **Badges survive shell restarts** — notification counts and their dedupe keys round-trip through `~/.local/state/omarchy/omadock-badges.json` (bounded on both write and read), keeping the documented promise that counts stay until the app is focused even across an Omarchy shell restart; clearing on focus persists too.
+- **Drive warnings can no longer be silently lost** — the unsafe-removal and missing-app warnings run through a `scripts/notify.sh` shim that calls `notify-send` with dash-safe arguments and falls back to Omarchy's own sender when `notify-send` is broken on the host (a libnotify ABI mismatch fails it at startup). Safe eject goes through the same shim.
+- **Focus handoff fixes for parking and minimizing** — parking a window never leaves keyboard focus inside the parking-lot workspace, restore hands focus deterministically (a sibling window first, then the most recently used standing window), and window lookups accept both handles and hex address strings so restores work whatever format Hyprland reports.
+
 ### v4.0.1 — 2026-10-04
 
 - **Classic indicator look restored** — running marks draw at their original dimensions again (5px dots, 4px micro-dots past five windows, 12×4 bars, 1.5px minimized rings). A contributor's fractional-scale fix had quietly thinned every mark by a pixel; that look change is reverted while the pixel-grid snapping it introduced stays.
