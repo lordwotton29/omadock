@@ -112,7 +112,7 @@ omarchy plugin remove omadock --yes
 
 ### 🔘 1. 3-State Window Indicators
 
-Every icon shows all its windows at a glance: **▬** active · **●** open · **○** minimized.
+Every icon shows all its windows at a glance: **▬** active · **●** open · **○** minimized. App group tiles carry the same marks — one per member window — with the accent bar on the focused member's window, so a foldered app behaves exactly like a pinned one.
 
 | Window Count | Indicator Visual | Behavior |
 | :--- | :--- | :--- |
@@ -139,6 +139,8 @@ When a window is parked on `special:minimized`, Omadock generates a live visual 
 windows, including ones minimized to the dock's hidden workspace. They are
 captured into GPU memory only while the tooltip is open and are never
 written to disk. Turn them off in Settings → Behavior → Window previews.
+An app group's tooltip shows its member windows the same way, with the
+focused member's window in front.
 
 ---
 
@@ -236,6 +238,7 @@ Deep Linux desktop and compositor integration:
 ### 🔔 10. Notification Badges & CLI App Identity
 
 - Dock icons show a badge counting **matching notifications** (pinned, running, and foldered apps alike); a folder tile sums its members' counts. Counts are **sticky**: one notification bumps the badge by one and the count stays until the app gains focus — dismissing or expiring the popup does not clear it. These are not unread-message counts.
+- The badge is customizable: `badgeStyle` picks a count pill or a plain dot, `badgePosition` picks the corner of the icon (`"top-right"`, `"top-left"`, `"bottom-right"`, `"bottom-left"`), and `badgeColor` picks accent, urgent red or a neutral pill.
 - Terminal-launched apps know who they are: **Antigravity** (`agy`) and **btop** keep their own product icons; the terminal's icon is only a fallback for unknown CLI tools.
 
 ---
@@ -377,6 +380,9 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
   "showUrgentHint": true,
   "urgentOnNotification": true,
   "showNotificationBadges": true,
+  "badgeStyle": "count",
+  "badgePosition": "top-right",
+  "badgeColor": "accent",
   "urgentSound": true,
   "urgentSoundName": "bell",
   "folderColor": "theme",
@@ -438,6 +444,9 @@ Settings persist in `~/.config/omarchy/omadock.json` and are editable live:
 | `hoverEffect` | `string` | `"zoom"` | Hover mode: magnification `"zoom"` or `"wave"`; effects `"lift"`, `"glow"`, `"glitch"` (shaders); or `"off"`. |
 | `dividerGeometry` | `string` | `"classic"` | Section divider length: `"classic"` keeps the original short lines; `"long"` uses the adjustable `dividerHeight` share. |
 | `showNotificationBadges` | `bool` | `true` | Count matching notifications on dock icons and folder tiles (not unread messages); sticky until the app is focused. |
+| `badgeStyle` | `string` | `"count"` | Badge shape: `"count"` pill with the number, or `"dot"`. |
+| `badgePosition` | `string` | `"top-right"` | Corner of the icon the badge sits on: `"top-right"`, `"top-left"`, `"bottom-right"`, `"bottom-left"`. |
+| `badgeColor` | `string` | `"accent"` | Badge colour: `"accent"`, `"urgent"` (red) or `"neutral"`. |
 | `revealDelay` | `int` | `160` | Edge dwell time in milliseconds before unhiding ($0$–$2000$). |
 | `tooltipDelay` | `int` | `450` | Tooltip hover dwell delay in milliseconds ($0$–$5000$). |
 | `wheelStepDelay` | `int` | `150` | Minimum milliseconds between accepted wheel steps while browsing an app's windows ($0$–$1000$). |
