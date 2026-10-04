@@ -526,7 +526,7 @@ Run <code>omarchy restart shell</code> in your terminal to instantly reload the 
 
 ## 🛠️ Diagnostics & Validation
 
-Every pull request runs the test suites, a QML syntax gate, the security grep, a check that the compiled shaders match their sources and the manifest schema check in CI.
+Every pull request runs the test suites, a QML syntax gate, the security grep, a check that the compiled shaders match their sources and the manifest schema check in CI. Pull requests must target the `experimental` branch — `main` only receives verified release batches — and CI enforces the base branch.
 
 ```bash
 # Validate manifest compliance against Omarchy 4.0.3+ standards
@@ -592,3 +592,10 @@ Copyright © 2026 **[thepathless](https://github.com/thepathless)**.
 ## 📋 Releases & Changelog
 
 Full release notes, historical changelogs, and upgrade guides across all versions are available on [**GitHub Releases**](https://github.com/thepathless/omadock/releases).
+
+### v4.0.1 — 2026-10-04
+
+- **App groups behave like pinned apps** — a group tile's indicator is the same row apps carry (one mark per member window, hollow dots for minimized, `+N` overflow), its accent bar follows the focused member's window, and the group's tooltip shows the member windows as live preview cards with the focused one in front.
+- **Notification badge customization** — `badgeStyle` (count pill or dot), `badgePosition` (any corner) and `badgeColor` (accent, urgent, neutral), with settings rows and fuzzy-search entries. The badge now rides the icon through hover effects.
+- **Contributor integrations** (thanks [@priard](https://github.com/priard)) — urgency on notifications without the shell service (#27), the badge following hover effects (#28), CI security grep and shader-source sync (#29), honest folder-stack truncation and failure labels (#30), warnings for drives pulled while mounted (#31), DockModel behaviour and gate tests (#32), live tooling and a dock benchmark (#33), and a preset-menu flicker fix (#36).
+- **Contribution policy** — pull requests now target `experimental`, enforced in CI; `main` only receives verified release batches.
