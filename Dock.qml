@@ -2936,8 +2936,11 @@ Item {
     return null
   }
 
+  // Accepts a toplevel handle or a raw address string; every address-keyed
+  // lookup goes through here so "574e…" and "0x574e…" can never diverge.
   function windowAddress(handle) {
-    var value = String((handle && handle.address) || "").trim()
+    var raw = (handle && handle.address !== undefined && handle.address !== null) ? handle.address : handle
+    var value = String(raw == null ? "" : raw).trim()
     if (!value) return ""
     if (value.slice(0, 2) === "0x" || value.slice(0, 2) === "0X") value = value.slice(2)
     return "0x" + value.toLowerCase()
@@ -2997,13 +3000,14 @@ Item {
 
   function liveToplevelForAddress(addr) {
     if (!addr) return null
+    var want = root.windowAddress(addr)
     try {
       var tops = ToplevelManager.toplevels ? ToplevelManager.toplevels.values : []
       for (var i = 0; i < tops.length; i++) {
         var top = tops[i]
         if (!top) continue
         var h = root.hyprToplevelFor(top)
-        if (root.windowAddress(h) === addr) return top
+        if (root.windowAddress(h) === want) return top
       }
     } catch (e) {
       console.warn("[omadock] Failed resolving live toplevel for address:", e)
@@ -3013,11 +3017,12 @@ Item {
 
   function liveHyprToplevelForAddress(addr) {
     if (!addr) return null
+    var want = root.windowAddress(addr)
     try {
       var tops = Hyprland.toplevels ? Hyprland.toplevels.values : []
       for (var i = 0; i < tops.length; i++) {
         var h = tops[i]
-        if (h && root.windowAddress(h) === addr) return h
+        if (h && root.windowAddress(h) === want) return h
       }
     } catch (e) {
       console.warn("[omadock] Failed resolving live Hyprland toplevel for address:", e)
@@ -3030,7 +3035,6 @@ Item {
     root.clearUrgentApp(appId || "", addr)
     var handle = root.liveHyprToplevelForAddress(addr)
     var top = root.liveToplevelForAddress(addr)
-
 
     if (handle) {
       var workspace = handle.workspace
@@ -3099,7 +3103,7 @@ Item {
   // parked — the click contract's "step to the app's next window". appId
   // carries the urgent-clear context for focusing it.
   function minimizeToplevel(topOrAddr, focusNext, appId) {
-    var address = typeof topOrAddr === "string" ? topOrAddr : root.windowAddress(root.hyprToplevelFor(topOrAddr))
+    var address = root.windowAddress(typeof topOrAddr === "string" ? topOrAddr : root.hyprToplevelFor(topOrAddr))
     if (!address) return false
 
     var wasFocused = root.activeWindowAddress === address
@@ -3121,20 +3125,8 @@ Item {
       'hl.dsp.window.move({ window = "address:' + address + '", workspace = "'
         + root.luaString(root.minimizedWorkspace) + '", follow = false })',
       "movetoworkspacesilent " + root.minimizedWorkspace + ",address:" + address)
-    if (wasFocused) root.handoffFocusAfterPark(address, origin, focusNext || null, appId || "")
+    if (wasFocused) root.handoffFocusAfterPark(address, focusNext || null, appId || "")
     return true
-  }
-
-  // A window of wsTarget other than exceptAddress, as the compositor sees it.
-  function workspaceHasLiveWindow(wsTarget, exceptAddress) {
-    if (!wsTarget) return false
-    var list = Hyprland.toplevels ? Hyprland.toplevels.values : []
-    for (var i = 0; i < list.length; i++) {
-      var a = root.windowAddress(list[i])
-      if (!a || a === exceptAddress) continue
-      if (root.liveWsNameOf(list[i]) === wsTarget) return true
-    }
-    return false
   }
 
   // The window to take focus when a park emptied its workspace: the most
@@ -3159,21 +3151,28 @@ Item {
 
   // Parking must never leave the keyboard inside the parking lot. The click
   // contract says parking one of several windows "hands focus straight to a
-  // sibling". With no sibling, the compositor hands focus to another window of
-  // the workspace on its own; only an emptied workspace needs help, and it
-  // goes to the window used before this one rather than any particular app.
-  function handoffFocusAfterPark(address, origin, focusNext, appId) {
-    if (focusNext && focusNext.address && focusNext.address !== address) {
-      root.focusWindowByAddress(focusNext.address, appId)
-      return
+  // sibling"; with no sibling it goes to the window used before this one
+  // rather than any particular app. Focus is dispatched, not Wayland-
+  // activated: dispatchers queue in the compositor behind the park move, so
+  // this deterministically beats the compositor's own handoff (an activation
+  // arrived out of order and lost that race on busy workspaces).
+  function handoffFocusAfterPark(address, focusNext, appId) {
+    var target = ""
+    if (focusNext && focusNext.address && root.windowAddress(focusNext) !== address)
+      target = root.windowAddress(focusNext)
+    if (!target) {
+      var prev = root.standingWindowAfterPark(address)
+      if (prev) target = root.windowAddress(prev)
     }
-    if (root.workspaceHasLiveWindow(origin, address)) return
-    var prev = root.standingWindowAfterPark(address)
-    if (prev) root.focusWindowByAddress(root.windowAddress(prev), "")
+    if (!target) return
+    root.withoutPointerWarp(function() {
+      root.hyprDispatch('hl.dsp.focus({ window = "address:' + root.luaString(target) + '" })',
+                        "focuswindow address:" + target)
+    })
   }
 
   function restoreWindow(targetRef, appId, useOrigin) {
-    var address = typeof targetRef === "string" ? targetRef : root.windowAddress(targetRef)
+    var address = root.windowAddress(targetRef)
     if (!address) return false
 
 
@@ -3288,9 +3287,10 @@ Item {
   // time and fall back to the cached name only while no handle exists.
   function liveWsNameOf(win) {
     var cached = win ? String(win.workspaceName || "") : ""
-    var h = (win && win.address) ? root.liveHyprToplevelForAddress(win.address) : null
+    var addr = win ? root.windowAddress(win) : ""
+    var h = addr ? root.liveHyprToplevelForAddress(addr) : null
     if (h && h.workspace) return String(h.workspace.name || h.workspace.id || "")
-    if (win && win.address && root.minimizedOrigins && root.minimizedOrigins[win.address] !== undefined)
+    if (addr && root.minimizedOrigins && root.minimizedOrigins[addr] !== undefined)
       return root.minimizedWorkspace
     return cached
   }
