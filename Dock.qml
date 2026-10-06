@@ -164,7 +164,6 @@ Item {
   readonly property var dropFolderProbeRef: dropFolderProbe
   readonly property var ejectProcRef: ejectProc
   readonly property var folderStackScannerRef: folderStackScanner
-  readonly property var iconIndexScanRef: iconIndexScan
   readonly property var launchPruneTimerRef: launchPruneTimer
   readonly property var modelTimerRef: modelTimer
   readonly property var removableDrivesScannerRef: removableDrivesScanner
@@ -197,26 +196,13 @@ Item {
   DockStateLogic { id: stateLogic }
   DockPersistLogic { id: persistLogic }
   DockGroupCycleLogic { id: groupCycleLogic }
+  DockLabelLogic { id: labelLogic }
 
   // Fallback standalone application library for host capability gates (e.g. Omarchy 4.x scoped plugins)
 
   LocalAppLibrary {
     id: localAppLibrary
     rootRef: root
-  }
-
-  // One-shot scans only: started on load, on app-list changes and on theme
-  // changes. Nothing polls, so the dock stays at 0% CPU when idle.
-  Process {
-    id: iconIndexScan
-    command: ["bash", "-c", localAppLibrary.iconIndexScanCommand()]
-    // One collected read, parsed once: a callback per line cost ~23 600
-    // GUI-thread calls on every start and theme change.
-    stdout: StdioCollector { id: iconIndexOut; waitForEnd: true }
-    onExited: {
-      localAppLibrary.iconIndex = DockModel.parseIconIndex(iconIndexOut.text)
-      localAppLibrary.appsChanged()
-    }
   }
 
   // Launch wrapper: one-shot, event-driven (a failed gtk-launch probe exits
@@ -232,21 +218,6 @@ Item {
     }
   }
 
-  // Coalesces bursts of app-list changes (one package install touches many
-  // entries) into a single rescan.
-  Timer {
-    id: iconIndexDebounce
-    interval: 750
-    onTriggered: if (!iconIndexScan.running) iconIndexScan.running = true
-  }
-
-  Connections {
-    target: (root.appLibrary === localAppLibrary && typeof DesktopEntries !== "undefined") ? DesktopEntries : null
-    function onApplicationsChanged() {
-      iconIndexDebounce.restart()
-      localAppLibrary.appsChanged()
-    }
-  }
 
   // Build the index once at load, but only when the host withheld its own
   // library — with a host library present the index would be dead weight.
@@ -257,7 +228,7 @@ Item {
     // ran on a fresh install. Real values re-apply unchanged once the async
     // gate lands them.
     root.loadConfig()
-    if (root.appLibrary === localAppLibrary) iconIndexScan.running = true
+    if (root.appLibrary === localAppLibrary) localAppLibrary.refreshIcons()
     // Fills HyprlandMonitor.scale for outputScale.
     root.recheckOutputScale()
   }
@@ -912,6 +883,13 @@ Item {
   readonly property bool clickToMinimize: root.minimizeMode !== "off"
   property bool showUrgentHint: true
   property bool urgentOnNotification: true
+  // ---- name labels on the tiles (policy in DockLabelLogic)
+  property bool showLabels: false
+  property string labelKind: "all"        // all | apps | groups | folders
+  property string labelPlacement: "below" // below | above
+  property string labelSize: "small"      // small | medium | large
+  property string labelContrast: "theme"  // theme | high | pill
+
   property bool showNotificationBadges: true
   // Badge look: what the pill carries, which corner it sits on, its colour.
   property string badgeStyle: "count"
@@ -1900,6 +1878,10 @@ Item {
   // App-group member preview: scroll cycling + click-to-focus (hover bubble)
   function groupCycleFront(key, windows, frontIndex, angleDelta) { return groupCycleLogic.cycleFront(root, key, windows, frontIndex, angleDelta) }
   function focusPreviewedWindow(windows, frontIndex) { return groupCycleLogic.focusPreviewed(root, windows, frontIndex) }
+
+  // Name labels: rendering policy (visibility, size, contrast, band)
+  function labelStyle(kind) { return labelLogic.style(root, kind) }
+  function labelBandHeight() { return labelLogic.bandHeight(root) }
 
   function withoutPointerWarp(action) { return stateLogic.withoutPointerWarp(root, action) }
 

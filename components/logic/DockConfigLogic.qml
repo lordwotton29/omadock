@@ -137,6 +137,12 @@ QtObject {
     root.badgeStyle = (parsed && parsed.badgeStyle === "dot") ? "dot" : "count"
     root.badgePosition = (parsed && ["top-left", "top-right", "bottom-left", "bottom-right"].indexOf(parsed.badgePosition) >= 0) ? parsed.badgePosition : "top-right"
     root.badgeColor = (parsed && ["accent", "urgent", "neutral"].indexOf(parsed.badgeColor) >= 0) ? parsed.badgeColor : "accent"
+    // Name labels (DockLabelLogic): bounded spellings, labels off by default.
+    root.showLabels = !!(parsed && parsed.showLabels === true)
+    root.labelKind = (parsed && ["all", "apps", "groups", "folders"].indexOf(parsed.labelKind) >= 0) ? parsed.labelKind : "all"
+    root.labelPlacement = (parsed && parsed.labelPlacement === "above") ? "above" : "below"
+    root.labelSize = (parsed && ["small", "medium", "large"].indexOf(parsed.labelSize) >= 0) ? parsed.labelSize : "small"
+    root.labelContrast = (parsed && ["theme", "high", "pill"].indexOf(parsed.labelContrast) >= 0) ? parsed.labelContrast : "theme"
     root.urgentSound = parsed ? parsed.urgentSound !== false : true
     root.urgentSoundName = DockModel.cleanSoundName(parsed ? parsed.urgentSoundName : "bell")
     root.revealDelay = parsed && typeof parsed.revealDelay === "number"
@@ -227,6 +233,11 @@ QtObject {
     conf.badgeStyle = root.badgeStyle
     conf.badgePosition = root.badgePosition
     conf.badgeColor = root.badgeColor
+    conf.showLabels = root.showLabels
+    conf.labelKind = root.labelKind
+    conf.labelPlacement = root.labelPlacement
+    conf.labelSize = root.labelSize
+    conf.labelContrast = root.labelContrast
     conf.urgentSound = root.urgentSound
     conf.urgentSoundName = root.urgentSoundName
     conf.revealDelay = root.revealDelay

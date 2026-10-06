@@ -1,17 +1,21 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import "../DockModel.js" as DockModel
 
 // Fallback standalone application library for host capability gates (e.g.
 // Omarchy 4.x scoped plugins) plus the absolute-path icon index (see
-// AGENTS.md "Icon Resolution"). Non-visual helper component; the dock root
-// passes itself as rootRef and owns the iconIndexScan process.
+// AGENTS.md "Icon Resolution"). Non-visual helper component: the dock root
+// passes itself as rootRef; the scan process and its coalescing watcher are
+// private to this component.
 
-  QtObject {
+  Item {
     id: localAppLibrary
 
     property var rootRef: null
+    width: 0
+    height: 0
 
     signal appsChanged()
 
@@ -77,7 +81,7 @@ import "../DockModel.js" as DockModel
     }
 
     function refreshIcons() {
-      if (!rootRef.iconIndexScanRef.running) rootRef.iconIndexScanRef.running = true
+      if (!iconIndexScan.running) iconIndexScan.running = true
     }
 
     // SVGs before PNGs so the first hit per name is the scalable one; awk
@@ -127,4 +131,34 @@ import "../DockModel.js" as DockModel
       launchProc.command = args
       launchProc.running = true
     }
-  }
+
+    // One-shot scans only: started on load, on app-list changes and on theme
+    // changes. Nothing polls, so the dock stays at 0% CPU when idle.
+    Process {
+      id: iconIndexScan
+      command: ["bash", "-c", localAppLibrary.iconIndexScanCommand()]
+      // One collected read, parsed once: a callback per line cost ~23 600
+      // GUI-thread calls on every start and theme change.
+      stdout: StdioCollector { id: iconIndexOut; waitForEnd: true }
+      onExited: {
+        localAppLibrary.iconIndex = DockModel.parseIconIndex(iconIndexOut.text)
+        localAppLibrary.appsChanged()
+      }
+    }
+
+    // Coalesces bursts of app-list changes (one package install touches many
+    // entries) into a single rescan.
+    Timer {
+      id: iconIndexDebounce
+      interval: 750
+      onTriggered: localAppLibrary.refreshIcons()
+    }
+
+    Connections {
+      target: (rootRef.appLibrary === localAppLibrary && typeof DesktopEntries !== "undefined") ? DesktopEntries : null
+      function onApplicationsChanged() {
+        iconIndexDebounce.restart()
+        localAppLibrary.appsChanged()
+      }
+    }
+}

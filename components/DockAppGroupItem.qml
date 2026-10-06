@@ -379,6 +379,14 @@ Item {
     }
   }
 
+  // Name label (visibility/size/contrast decided in DockLabelLogic).
+  DockLabel {
+    rootRef: gitem.rootRef
+    name: gitem.groupName
+    kind: "group"
+    tile: gitem
+  }
+
   // Hover tooltip: the member windows as preview cards, like an app's.
   HoverTooltip {
     dockRoot: root

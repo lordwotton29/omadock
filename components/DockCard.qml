@@ -309,7 +309,10 @@ Item {
     }
 
     width: row.implicitWidth + contentLeftInset + contentRightInset
-    height: row.implicitHeight + contentTopInset + contentBottomInset
+    // While name labels show, the card grows by their band (DockLabelLogic),
+    // and the window height, autohide mask and exclusive zone all follow
+    // this height already. The row itself never changes size.
+    height: row.implicitHeight + contentTopInset + contentBottomInset + (root ? root.labelBandHeight() : 0)
 
     // Click on card padding dismisses context menu
     MouseArea {
@@ -346,7 +349,8 @@ Item {
       spacing: Style.space(root ? root.itemSpacing : 4)
 
       x: dockCard.contentLeftInset
-      y: dockCard.contentTopInset
+      // Above-placement puts the label band over the icons' side of the card.
+      y: dockCard.contentTopInset + ((root && root.labelPlacement === "above") ? root.labelBandHeight() : 0)
 
       DockIconButton {
         rootRef: cardWrapper.rootRef
