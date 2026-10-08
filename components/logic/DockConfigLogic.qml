@@ -1,5 +1,6 @@
 import QtQuick
 import "../../DockModel.js" as DockModel
+import "../../Buttons.js" as Buttons
 
 // Config and preset logic, extracted from Dock.qml so the root file only
 // declares state and wiring. Every function is stateless: the dock root is
@@ -156,6 +157,7 @@ QtObject {
     root.wheelStepDelay = parsed && typeof parsed.wheelStepDelay === "number"
       ? Math.max(0, Math.min(1000, Math.round(parsed.wheelStepDelay)))
       : 150
+    root.pinnedButtons = parsed ? Buttons.boundPinnedButtons(parsed.pinnedButtons) : []
     if (parsed && DockModel.isList(parsed.pinnedFolders)) {
       root.pinnedFolders = DockModel.boundPinnedFolders(parsed.pinnedFolders)
     } else {
@@ -248,6 +250,7 @@ QtObject {
     conf.tooltipDelay = root.tooltipDelay
     conf.wheelStepDelay = root.wheelStepDelay
     conf.pinnedFolders = DockModel.boundPinnedFolders(root.pinnedFolders)
+    conf.pinnedButtons = Buttons.boundPinnedButtons(root.pinnedButtons)
     conf.presets = DockModel.boundPresets(root.presets)
     return conf
   }
