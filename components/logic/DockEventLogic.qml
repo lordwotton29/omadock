@@ -102,6 +102,7 @@ function handleRawEvent(root, event) {
       delete mo[fullAddr]
       root.minimizedOrigins = mo
     }
+    root.dropParkSlot(fullAddr)
   }
   if (n === "workspace" || n === "workspacev2" || n === "openwindow" || n === "closewindow" ||
       n === "movewindow" || n === "movewindowv2" || n === "resizewindow" || n === "resizewindowv2" ||

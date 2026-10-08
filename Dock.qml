@@ -139,6 +139,7 @@ Item {
   property bool _syncingShared: false
   onMinimizedOriginsChanged: root.pushSharedState()
   onParkedAtChanged: root.pushSharedState()
+  onParkSlotsChanged: root.pushSharedState()
   onSharedStateChanged: root.pullSharedState()
 
   function pushSharedState() { return screenLogic.pushSharedState(root) }
@@ -149,6 +150,7 @@ Item {
     target: root.sharedState
     function onMinimizedOriginsChanged() { root.pullSharedState() }
     function onParkedAtChanged() { root.pullSharedState() }
+    function onParkSlotsChanged() { root.pullSharedState() }
   }
 
   function screenForName(name) { return screenLogic.screenForName(root, name) }
@@ -185,6 +187,8 @@ Item {
   // ------------------------------------------------------ logic modules
   DockConfigLogic { id: configLogic }
   DockWindowLogic { id: windowLogic }
+  DockSlotLogic { id: slotLogic }
+  DockEventLogic { id: eventLogic }
   DockGroupsLogic { id: groupsLogic }
   DockNotifLogic { id: notifLogic }
   DockFolderLogic { id: folderLogic }
@@ -487,7 +491,13 @@ Item {
   // running, and foldered (grouped) apps alike.
   readonly property var notifEntries: root.pinnedSection.concat(root.runningSection).concat(root.groupedSection || [])
 
-  function refreshDock() { return stateLogic.refreshDock(root) }
+  // Model rebuilds are also the moment to re-read window rectangles: the tiling
+  // places are computed from them.
+  function refreshDock() {
+    var result = stateLogic.refreshDock(root)
+    root.refreshClientRects()
+    return result
+  }
 
   function rescanMinimizedWindows() { return stateLogic.rescanMinimizedWindows(root) }
 
@@ -530,6 +540,16 @@ Item {
   readonly property string minimizedWorkspace: "special:minimized"
   property var minimizedOrigins: ({})
   property var parkedAt: ({})
+  // Where each parked window sat, and the queue of windows still waiting to win
+  // their place back. See DockSlotLogic.
+  property var parkSlots: ({})
+  property var pendingSlotFixes: []
+  // The window the user restored: focus returns to it once the layout work is
+  // done, since reshaping has to focus other windows on the way.
+  property string slotFixFocus: ""
+  // Window rectangles, read from Hyprland in one shot: Quickshell's per-toplevel
+  // ipc object only carries at/size for windows that existed at shell start.
+  property var clientRects: ({})
   property var urgentMap: ({})
   // Counts urgency events (Hyprland urgent, app notifications) so items can
   // animate again for a new event while they are already marked urgent.
@@ -877,6 +897,11 @@ Item {
   property real dividerWidth: 1.5
   property real dividerOpacity: 0.4
   property string minimizeMode: "active"
+  // Where a parked window comes back: the workspace you are on, or the one it was
+  // parked from. Windows puts a minimized window back where it was.
+  property string restoreWorkspace: "current"
+  // Whether the window also wins back the place it held in the tiling layout.
+  property bool restoreSlot: false
   // Hyprland warps the pointer into a window it activates (and on workspace
   // switches); keepPointer suppresses that for focus changes the dock makes.
   property bool keepPointer: true
@@ -975,6 +1000,34 @@ Item {
     id: modelSettleTimer
     interval: 300
     onTriggered: root.refreshDock()
+  }
+
+  // Slot recovery after a restore: Hyprland inserts the window home as a new tiling
+  // window, so its recorded place is won back with a swap. The layout settles a beat
+  // after the move, hence the delay; every window gets a few passes, then the dock
+  // stops rather than fight a layout the user changed while the window was parked.
+  Timer {
+    id: slotFixTimer
+    interval: 180
+    repeat: false
+    onTriggered: {
+      if (slotLogic.runSlotFixes(root) > 0) restart()
+    }
+  }
+
+  // One shot, on demand: window rectangles for the tiling-place bookkeeping.
+  Process {
+    id: clientRectsProc
+    command: ["hyprctl", "-j", "clients"]
+    running: false
+    stdout: StdioCollector {
+      onStreamFinished: root.clientRects = slotLogic.parseClientRects(root, this.text)
+    }
+  }
+
+  function refreshClientRects() {
+    if (clientRectsProc.running) return
+    clientRectsProc.running = true
   }
 
   Timer {
@@ -1810,9 +1863,35 @@ Item {
 
   function standingWindowAfterPark(exceptAddress) { return windowLogic.standingWindowAfterPark(root, exceptAddress) }
 
-  function handoffFocusAfterPark(address, focusNext, appId) { return windowLogic.handoffFocusAfterPark(root, address, focusNext, appId) }
+  function handoffFocusAfterPark(address, focusNext, appId) { return slotLogic.handoffFocusAfterPark(root, address, focusNext, appId) }
 
   function restoreWindow(targetRef, appId, useOrigin) { return windowLogic.restoreWindow(root, targetRef, appId, useOrigin) }
+
+  // One specific parked window: the minimize toggle's second press restores exactly
+  // what its first press parked. Always the recorded origin.
+  function restoreAddress(address) { return windowLogic.restoreWindow(root, address, "", true) }
+
+  // Recorded-place bookkeeping: the queue and the timer stay here, the logic in
+  // DockSlotLogic (which other modules reach through these).
+  function scheduleSlotFix(address) {
+    if (!address) return
+    var queue = root.pendingSlotFixes ? root.pendingSlotFixes.slice() : []
+    if (queue.indexOf(address) < 0) queue.push(address)
+    root.pendingSlotFixes = queue
+    root.slotFixFocus = address
+    slotFixTimer.restart()
+  }
+
+  function dropParkSlot(address) {
+    if (!address || !root.parkSlots || root.parkSlots[address] === undefined) return
+    var slots = {}
+    for (var k in root.parkSlots) slots[k] = root.parkSlots[k]
+    delete slots[address]
+    root.parkSlots = slots
+    root.pendingSlotFixes = (root.pendingSlotFixes || []).filter(function(a) { return a !== address })
+  }
+
+  function recordParkSlot(address, origin) { return slotLogic.recordParkSlot(root, address, origin) }
 
   function restoreWindowBatch(wins, primaryAddress, useOrigin) { return windowLogic.restoreWindowBatch(root, wins, primaryAddress, useOrigin) }
 
@@ -1878,6 +1957,13 @@ Item {
 
     function restoreLast(): void {
       root.restoreLast()
+    }
+
+    // Brings back one specific parked window: the minimize/restore key toggle
+    // restores exactly the window its first press parked. Always the recorded
+    // origin, so the window also wins its tiling place back.
+    function restoreAddress(address: string): void {
+      root.restoreAddress(address)
     }
 
     function toggleVisibility(): void {

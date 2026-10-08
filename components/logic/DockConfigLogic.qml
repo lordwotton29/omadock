@@ -129,6 +129,8 @@ QtObject {
     } else {
       root.minimizeMode = "active"
     }
+    root.restoreWorkspace = (parsed && parsed.restoreWorkspace === "origin") ? "origin" : "current"
+    root.restoreSlot = !!(parsed && parsed.restoreSlot === true)
     root.keepPointer = parsed ? parsed.keepPointer !== false : true
     root.showUrgentHint = parsed ? parsed.showUrgentHint !== false : true
     root.urgentOnNotification = parsed ? parsed.urgentOnNotification !== false : true
@@ -226,6 +228,8 @@ QtObject {
     conf.dividerOpacity = root.dividerOpacity
     conf.minimizeMode = root.minimizeMode
     conf.clickToMinimize = root.minimizeMode !== "off"
+    conf.restoreWorkspace = root.restoreWorkspace
+    conf.restoreSlot = root.restoreSlot
     conf.keepPointer = root.keepPointer
     conf.showUrgentHint = root.showUrgentHint
     conf.urgentOnNotification = root.urgentOnNotification
